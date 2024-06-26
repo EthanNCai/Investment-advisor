@@ -1,0 +1,120 @@
+# 登录功能
+
+
+
+## Django登录功能实现
+
+1. 创建 Django 项目并创建一个名为 **``accounts``** 的应用程序
+
+   ```python
+   django-admin startproject login_demo
+   python manage.py startapp accounts 
+   ```
+
+2. 简单用户模型定义
+
+   ```python
+   class CustomUser(AbstractUser):
+       pass
+   ```
+
+3. 创建登录视图(待优化)
+
+   ```python
+   def user_login(request):
+       if request.method == 'POST':
+           username = request.POST.get('username')
+           password = request.POST.get('password')
+   
+           if username and password:  
+               return JsonResponse({'username': username, 'password': password})
+           else:
+               return JsonResponse({'error': 'Username and password cannot be empty'})
+       else:
+           return render(request, 'login.html')
+   
+   ```
+
+4. 最简单的登录html文件
+
+   ```html
+   <form method="post" action="{% url 'user_login' %}">
+       {% csrf_token %}
+       <input type="text" name="username" placeholder="用户名" required>
+       <input type="password" name="password" placeholder="密码" required>
+       <button type="submit">登录</button>
+   </form>
+   ```
+
+5. 配置url
+
+   在 **``accounts/urls.py``** 中配置登录视图的 url
+
+   ```python
+   from django.urls import path
+   from . import views
+   
+   urlpatterns = [
+       path('login/', views.user_login, name='user_login'),
+   ]
+   ```
+
+   在 **``login_demo/urls.py``** 中包含应用程序的 url 配置：
+
+   ```python
+   from django.urls import path, include
+   
+   urlpatterns = [
+       path('accounts/', include('accounts.urls')),
+   ]
+   ```
+
+6. 运行服务器
+
+   运行开发服务器并访问 **``http://127.0.0.1:8000/accounts/login/``** 来查看登录页面：
+
+   ```python
+   python manage.py runserver
+   ```
+
+   
+
+## python脚本
+
+1. 哈希密码并发送请求
+
+```python
+hashed_password = hashlib.sha256(password.encode('utf-8')).hexdigest()                     
+                                                                                  
+url = 'http://127.0.0.1:8000/accounts/login/'                                              
+payload = {'username': username, 'password': hashed_password}  
+```
+
+2. 为避免403错误（CSRF 保护安全机制，用于防止恶意网站伪造用户在已登录网站上的请求），在发送 POST 请求时包含 CSRF 令牌
+
+```python
+session = requests.Session()                                                               
+csrf_token = session.get(url).cookies['csrftoken']                                                           
+response = session.post(url, data=payload, headers={'X-CSRFToken': csrf_token})  
+```
+
+3. 登录成功获取登录的token，并写入`token.txt`文件
+
+```python
+if response.status_code == 200:                                                            
+                                                                                 
+    token = response.text                                                                                     
+    with open('token.txt', 'w') as file:                                                   
+        file.write(token)                                                                  
+    print("登录成功，并且 token 已保存到 token.txt 文件中。")                                             
+else:                                                                                      
+    print("登录失败：", response.status_code, response.text)                                    
+```
+
+
+
+## 待优化的地方
+
+* 登录视图部分功能需要完善，目前只是简单的模拟登录，只要账号密码输入了内容就能完成登录
+* token机制待优化，通过已有token进行登录的功能还需完善
+* requirement.txt有一些疑惑未解决
