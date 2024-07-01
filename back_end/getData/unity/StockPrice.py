@@ -1,28 +1,3 @@
-
-
-# 数据来源
-
-* 1、使用Easyquotation库，可以从新浪财经、集思录、腾讯财经多个数据源爬取数据，[源代码](https://github.com/shidenggui/easyquotation?tab=readme-ov-file) 
-
-## 数据库表的设计
-* 在这里我使用的是腾讯财经数据源，但由于爬取的A股和港股所得的信息有差异（爬取A股的信息很充足，但港股的信息就较少，但必要信息还是有的），这一点我还在找解决方法；目前是用两个数据表分别存A股和港股数据。
-* A股表设计：code(股票代码),name(股票名称),nowPrice(当前价格),openPrice(开盘价),closePrice(收盘价),highPrice(最高价),lowPrice(最低价),volume(成交量),turnover(成交额),marketValue(总市值),PE(市盈率),PB(市净率),datetime(日期时间)
-* 港股表设计:code(股票代码),name(股票名称),currentPrice(当前价格),openPrice(开盘价),hignPrice(最高价),lowPrice(最低价),volume(成交量),dtd(涨幅),time(日期时间)
-* 港股表与A股表差一些字段原因是港股数据源的接口返回的字段少一些。如下。
-* {'000001': {'name': '平安银行', 'code': '000001', 'now': 10.15, 'close': 10.13, 'open': 10.1, 'volume': 91809000.0, 'bid_volume': 46557800, 'ask_volume': 45251200.0, 'bid1': 10.14, 'bid1_volume': 605700, 'bid2': 10.13, 'bid2_volume': 667300, 'bid3': 10.12, 'bid3_volume': 535600, 'bid4': 10.11, 'bid4_volume': 832000, 'bid5': 10.1, 'bid5_volume': 566200, 'ask1': 10.15, 'ask1_volume': 277200, 'ask2': 10.16, 'ask2_volume': 802000, 'ask3': 10.17, 'ask3_volume': 325900, 'ask4': 10.18, 'ask4_volume': 167900, 'ask5': 10.19, 'ask5_volume': 218500, '最近逐笔成交': '', 'datetime': datetime.datetime(2024, 6, 28, 16, 14, 18), '涨跌': 0.02, '涨跌(%)': 0.2, 'high': 10.26, 'low': 10.09, '价格/成交量(手)/成交额': '10.15/918090/933947813', '成交量(手)': 91809000, '成交额(万)': 933950000.0, 'turnover': 0.47, 'PE': 4.21, 'unknown': '', 'high_2': 10.26, 'low_2': 10.09, '振幅': 1.68, '流通市值': 1969.66, '总市值': 1969.7, 'PB': 0.49, '涨停价': 11.14, '跌停价': 9.12, '量比': 1.12, '委差': 14153.0, '均价': 10.17, '市盈(动)': 3.3, '市盈(静)': 4.24}}
-* {'00700': {'lotSize': 100.0, 'name': '腾讯控股', 'price': 372.4, 'lastPrice': 374.4, 'openPrice': 371.6, 'amount': 15561097.0, 'time': '2024/06/28 16:08:43', 'dtd': -0.53, 'high': 376.0, 'low': 370.8}}
-
-## 性能测试
-* ```python import easyquotation import time start_time = time.time() quotation1 = easyquotation.use('tencent') end_time = time.time() print("股票数据获取耗时：{}秒".format(end_time - start_time)) ```
-* 股票数据获取耗时：0.06508564949035645秒
-
-## 后续需要完善的地方
-* 一个数据源爬取可能不够全面，需要考虑其他数据源的获取，如果只从新浪爬取数据的话，港股貌似爬取不了（也许我没找到对应的接口）；但要是真考虑多个数据源爬取，比如新浪爬取不了就去爬腾讯财经，耗时应该较多，这一点就需要优化。
-* 将爬取到的数据拿出需要的字段，并且还要建立对应的实体类。
-* 主要还是数据来源问题，我这几天再找找有没有更好的。
-
-## 代码（数据源还不够）
-```python
 import easyquotation
 import sqlite3
 
@@ -135,14 +110,3 @@ if __name__ == '__main__':
     sp = StockPrice('01600')
     sp.save_data(conn)
     conn.close()
-
-
-
-
-
-
-
-
-
-
-```
