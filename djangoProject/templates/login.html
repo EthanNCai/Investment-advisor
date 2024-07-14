@@ -1,0 +1,10 @@
+<form method="post" action="{% url 'user_login' %}">
+    {%  csrf_token %}
+    <label>
+        <input type="text" name="username" placeholder="用户名" required>
+    </label>
+    <label>
+        <input type="text" name="password" placeholder="密码" required>
+    </label>
+    <button type="submit">登录</button>
+</form>
