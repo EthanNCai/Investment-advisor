@@ -38,7 +38,7 @@ csrf_token = session.get(url).cookies['csrftoken']
 #
 # else:
 
-payload = {'username': username, 'password': hashed_password}
+payload = {'username': username, 'password': password}
 response = session.post(url, data=payload, headers={'X-CSRFToken': csrf_token})
 
 if response.status_code == 200:
