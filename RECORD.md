@@ -44,3 +44,4 @@
 
 2024 年 7 月 14 日 - 2024 年 7 月 17 日
 - 蔡：测试K线component
+- 陈：尝试加入restframework框架
