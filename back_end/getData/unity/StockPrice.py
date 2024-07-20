@@ -6,6 +6,7 @@ class StockPrice:
     def __init__(self, stock_code):
         self.stock_code = stock_code
         self.quotation = easyquotation.use('tencent')  # 默认使用腾讯数据源
+        # print(easyquotation.update_stock_codes())
 
     # 获取股票数据
     def fetch_data(self, data_source=None):
@@ -43,6 +44,7 @@ class StockPrice:
             conn.commit()
             return True
         else:
+            # print("无数据源")
             return False
 
     # 格式化A股数据源的数据
@@ -107,6 +109,6 @@ if __name__ == '__main__':
                       dtd REAL,
                       timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)''')
     conn.commit()
-    sp = StockPrice('01600')
+    sp = StockPrice('301603')
     sp.save_data(conn)
     conn.close()
