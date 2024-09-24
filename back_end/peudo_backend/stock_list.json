@@ -1,0 +1,34 @@
+{
+  "stocks": [
+    {
+      "code": "AAPL",
+      "name": "Apple Inc.",
+      "type": "美股"
+    },
+    {
+      "code": "0700",
+      "name": "腾讯控股",
+      "type": "港股"
+    },
+    {
+      "code": "GOOGL",
+      "name": "Alphabet Inc.",
+      "type": "美股"
+    },
+    {
+      "code": "03690",
+      "name": "美团点评",
+      "type": "港股"
+    },
+    {
+      "code": "601398",
+      "name": "工商银行",
+      "type": "A股"
+    },
+    {
+      "code": "600519",
+      "name": "贵州茅台",
+      "type": "A股"
+    }
+  ]
+}
