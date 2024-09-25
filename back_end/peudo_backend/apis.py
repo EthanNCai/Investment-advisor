@@ -16,6 +16,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 @app.get("/search_stocks/{keyword}")
 def search_stocks(keyword: str):
     with open('stock_list.json', 'r', encoding='utf-8') as file:
@@ -33,6 +34,14 @@ def search_stocks(keyword: str):
     return {"result": searched}
 
 
+@app.get("/fetch_stock_info/{code}")
+def search_stocks(code: str):
+    with open('stock_info_base.json', 'r', encoding='utf-8') as file:
+        stock_info_base = json.load(file)
+        return stock_info_base[code]
+
+
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="127.0.0.1", port=8000)
