@@ -21,10 +21,10 @@ for stock in stocks:
     output[code] = {}
 
     if date_list[-1] == "2014-04-01":
-        output[code]['ratio'] = list(reversed(close_list))
+        output[code]['close'] = list(reversed(close_list))
         output[code]['dates'] = list(reversed(date_list))
     else:
-        output[code]['ratio'] = close_list
+        output[code]['close'] = close_list
         output[code]['dates'] = date_list
 
 with open('stock_info_base.json', 'w') as f:
