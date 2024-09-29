@@ -32,7 +32,7 @@ export default function MenuAppBar() {
             <MenuIcon />
           </IconButton>
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-            Photos
+            投资性价比比较系统
           </Typography>
 
             <div>

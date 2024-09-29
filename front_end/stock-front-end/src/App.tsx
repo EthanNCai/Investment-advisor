@@ -1,6 +1,6 @@
 import MenuAppBar from "./components/MenuAppBar.tsx";
 import {Container, CssBaseline} from "@mui/material";
-import MainWidgetLayout from "./components/MainWidgetLayout.tsx";
+import MainLayout from "./components/MainLayout.tsx";
 
 
 
@@ -21,7 +21,7 @@ function App() {
 
           <Container maxWidth="lg" sx={{ padding: "0px", marginTop: "66px" }}>
 
-              <MainWidgetLayout/>
+              <MainLayout/>
           </Container>
 
       </>
