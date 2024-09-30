@@ -129,7 +129,10 @@ def k_chart_fetcher(code_a, code_b,duration_in, degree, threshold_arg):
                 "ratio": ratio,
                 "outlier_date_splitters": [],
                 "colors": ['gray'],
-                "fitting_line": fitting_line, }
+                "fitting_line": fitting_line,
+                "delta":delta,
+                "thres":threshold
+                }
 
     # 这一步很有意思，吧离散的date用区间的概念体现出来，返回的是这些区间的分割点
     outlier_date_splitters, outlier_date_pos_flags = convert_dates_to_splitters(outlier_dates)
@@ -174,7 +177,9 @@ def k_chart_fetcher(code_a, code_b,duration_in, degree, threshold_arg):
             "ratio":ratio,
             "outlier_date_splitters":outlier_date_splitters,
             "colors":colors,
-            "fitting_line":fitting_line,}
+            "fitting_line":fitting_line,
+            "delta":delta,
+            "thres":threshold}
 
     # i = 0
     # while i< max(n_neg_outliers,n_pos_outliers):

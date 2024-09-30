@@ -30,6 +30,8 @@ export interface KChartInfo {
   close_a:number[];
   close_b:number[];
   fitting_line:number[];
+  delta:number[];
+  thres:number;
 }
 
 export const StockContext = createContext<StockContextInterface | undefined>(
