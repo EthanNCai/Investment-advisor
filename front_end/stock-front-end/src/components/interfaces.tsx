@@ -5,26 +5,33 @@ export interface StockContextInterface {
   setCodeA: React.Dispatch<React.SetStateAction<string>>;
   codeB: string;
   setCodeB: React.Dispatch<React.SetStateAction<string>>;
-  kChartInfo: KChartInfo|undefined;
-  userOptions: UserOptions;
+  kChartInfo: KChartInfo | undefined;
+  duration:string;
+  setDuration:React.Dispatch<React.SetStateAction<string>>;
+  degree: number;
+  setDegree:React.Dispatch<React.SetStateAction<number>>;
+  threshold: number;
+  setThreshold:React.Dispatch<React.SetStateAction<number>>;
+}
+
+export interface UserOptionInfo{
+  duration:string;
+  degree:number;
+  threshold:number;
+  code_a:string;
+  code_b:string;
 }
 
 export interface KChartInfo {
-    ratio:number[];
-    dates:string[];
-    // marked_dates:string[];
-    // colors:string[];
-    // close_a
-    // close_b
-
+  ratio: number[];
+  dates: string[];
+  outlier_date_splitters:string[];
+  colors:string[];
+  close_a:number[];
+  close_b:number[];
+  fitting_line:number[];
 }
 
-export interface UserOptions {
-    ratio:number[];
-    dates:string[];
-    // marked_dates:string[];
-    // colors:string[];
-
-}
-
-export const StockContext = createContext<StockContextInterface | undefined>(undefined);
+export const StockContext = createContext<StockContextInterface | undefined>(
+  undefined
+);

@@ -19,7 +19,7 @@ function App() {
               <MenuAppBar/>
           </div>
 
-          <Container maxWidth="lg" sx={{ padding: "0px", marginTop: "66px" }}>
+          <Container maxWidth="lg" sx={{ padding: "0px", marginTop: "100px" }}>
 
               <MainLayout/>
           </Container>

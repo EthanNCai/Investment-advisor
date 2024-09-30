@@ -38,7 +38,7 @@ def date_alignment(close_a_, close_b_, dates_a_, dates_b_):
 
 def convert_dates_to_splitters(date_list) -> (list, list):
     if not date_list:
-        return []
+        return [],[]
 
     # 将字符串日期转换为datetime对象并排序
     dates = [datetime.strptime(date, "%Y-%m-%d") for date, _ in date_list]
@@ -66,7 +66,7 @@ def convert_dates_to_splitters(date_list) -> (list, list):
     return ranges, is_range_pos_flag
 
 
-def main(duration_in, degree, code_a, code_b, threshold_arg):
+def k_chart_fetcher(code_a, code_b,duration_in, degree, threshold_arg):
     # 第一步：拿到需要的两个股票的收盘价list
 
     with open('../peudo_backend/stock_info_base.json', 'r', encoding='utf-8') as file:
@@ -88,6 +88,7 @@ def main(duration_in, degree, code_a, code_b, threshold_arg):
 
     close_a = close_a[:duration_days]
     close_b = close_b[:duration_days]
+    dates = dates[:duration_days]
 
     first_date = dates[0]
     last_date = dates[-1]
@@ -121,6 +122,15 @@ def main(duration_in, degree, code_a, code_b, threshold_arg):
     n_outliers = len(xo)
     outlier_dates = [(dates[i], isPos) for i, isPos in xo]
 
+    if not outlier_dates:
+        return {"close_a": close_a,
+                "close_b": close_b,
+                "dates": dates,
+                "ratio": ratio,
+                "outlier_date_splitters": [],
+                "colors": ['gray'],
+                "fitting_line": fitting_line, }
+
     # 这一步很有意思，吧离散的date用区间的概念体现出来，返回的是这些区间的分割点
     outlier_date_splitters, outlier_date_pos_flags = convert_dates_to_splitters(outlier_dates)
 
@@ -128,8 +138,8 @@ def main(duration_in, degree, code_a, code_b, threshold_arg):
     # print(outlier_date_splitters)
     # print(outlier_date_pos_flags)
 
-    pos_outlier_color = 'green'
-    normal_color = 'blue'
+    pos_outlier_color = 'blue'
+    normal_color = 'black'
     neg_outlier_color = 'red'
 
     colors = []
@@ -151,32 +161,37 @@ def main(duration_in, degree, code_a, code_b, threshold_arg):
 
     assert len(colors) == len(outlier_date_splitters) + 1
 
-    print(close_a)
-    print(close_b)
-    print(dates)
-    print(ratio)
-    print(outlier_date_splitters)
-    print(colors)
+    # print(close_a)
+    # print(close_b)
+    # print(dates)
+    # print(ratio)
+    # print(outlier_date_splitters)
+    # print(colors)
+
+    return {"close_a":close_a,
+            "close_b":close_b,
+            "dates":dates,
+            "ratio":ratio,
+            "outlier_date_splitters":outlier_date_splitters,
+            "colors":colors,
+            "fitting_line":fitting_line,}
 
     # i = 0
     # while i< max(n_neg_outliers,n_pos_outliers):
     #     pass
-
-    xo_pos = [i if y - mean > threshold else None for i, y in enumerate(yd)]
-    xo_neg = [i if y - mean < -threshold else None for i, y in enumerate(yd)]
-
     # 可视化时间序列及离群点
-    plt.figure(figsize=(12, 6))
-    plt.plot(x, fitting_line, label='Time Series Data')
-    plt.plot(x, ratio, label='Time Series Data')
-    plt.plot(xo_neg, ratio, 'ro', markersize=8, label='Outliers')
-    plt.plot(xo_pos, ratio, 'bo', markersize=8, label='Outliers')
-    plt.xlabel('Time')
-    plt.ylabel('Value')
-    plt.title('Outliers Detection in Time Series Data using 3 Sigma Method')
-    plt.legend()
-    plt.grid(True)
-    plt.show()
+
+    # plt.figure(figsize=(12, 6))
+    # plt.plot(x, fitting_line, label='Time Series Data')
+    # plt.plot(x, ratio, label='Time Series Data')
+    # plt.plot([i if y - mean < -threshold else None for i, y in enumerate(yd)], ratio, 'ro', markersize=8, label='Outliers')
+    # plt.plot([i if y - mean > threshold else None for i, y in enumerate(yd)], ratio, 'bo', markersize=8, label='Outliers')
+    # plt.xlabel('Time')
+    # plt.ylabel('Value')
+    # plt.title('Outliers Detection in Time Series Data using 3 Sigma Method')
+    # plt.legend()
+    # plt.grid(True)
+    # plt.show()
 
 
-main('5y', 2, 'HSI', 'SPX', 1.5)
+# k_chart_fetcher('5y', 2, 'HSI', 'SPX', 1.5)

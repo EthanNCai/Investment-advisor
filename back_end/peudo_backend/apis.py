@@ -4,7 +4,8 @@ types = ['hk', 'a', 'us']
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-
+from pydantic import BaseModel
+from k_chart_fetcher import k_chart_fetcher
 app = FastAPI()
 
 # 允许所有源访问，可以根据需要进行定制
@@ -34,11 +35,17 @@ def search_stocks(keyword: str):
     return {"result": searched}
 
 
-@app.get("/fetch_stock_info/{code}")
-def search_stocks(code: str):
-    with open('stock_info_base.json', 'r', encoding='utf-8') as file:
-        stock_info_base = json.load(file)
-        return stock_info_base[code]
+class DataModel(BaseModel):
+    code_a: str
+    code_b: str
+    degree: int
+    duration: str
+    threshold: float
+
+@app.post("/get_k_chart_info/")
+async def receive_data(data: DataModel):
+    ret = k_chart_fetcher(data.code_a, data.code_b, data.duration, data.degree,  data.threshold)
+    return ret
 
 
 if __name__ == "__main__":
