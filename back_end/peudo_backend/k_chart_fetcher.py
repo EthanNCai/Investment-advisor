@@ -36,8 +36,7 @@ def date_alignment(close_a_, close_b_, dates_a_, dates_b_):
     return close_a, close_b, dates
 
 
-def convert_dates_to_splitters(date_list):
-
+def convert_dates_to_splitters(date_list) -> (list, list):
     if not date_list:
         return []
 
@@ -55,7 +54,7 @@ def convert_dates_to_splitters(date_list):
             end_date = prev_date + timedelta(days=1)
             ranges.append(start_date.strftime("%Y-%m-%d"))
             ranges.append(end_date.strftime("%Y-%m-%d"))
-            is_range_pos_flag.append(raw_flag[i+1])
+            is_range_pos_flag.append(raw_flag[i + 1])
             start_date = current_date
         prev_date = current_date
 
@@ -90,6 +89,8 @@ def main(duration_in, degree, code_a, code_b, threshold_arg):
     close_a = close_a[:duration_days]
     close_b = close_b[:duration_days]
 
+    first_date = dates[0]
+    last_date = dates[-1]
     ratio = [float(a) / float(b) for a, b in zip(close_a, close_b)]
 
     # 第二步：计算拟合曲线
@@ -118,23 +119,58 @@ def main(duration_in, degree, code_a, code_b, threshold_arg):
 
     # 获得离群点的dates
     n_outliers = len(xo)
-    outlier_dates = [(dates[i],isPos) for i, isPos in xo]
+    outlier_dates = [(dates[i], isPos) for i, isPos in xo]
 
     # 这一步很有意思，吧离散的date用区间的概念体现出来，返回的是这些区间的分割点
-    pos_outlier_date_ranges = convert_dates_to_splitters(outlier_dates)
+    outlier_date_splitters, outlier_date_pos_flags = convert_dates_to_splitters(outlier_dates)
 
-    print(pos_outlier_date_ranges)
+    assert len(outlier_date_splitters) == len(outlier_date_pos_flags) * 2
+    # print(outlier_date_splitters)
+    # print(outlier_date_pos_flags)
+
+    pos_outlier_color = 'green'
+    normal_color = 'blue'
+    neg_outlier_color = 'red'
+
+    colors = []
+    for outlier_date_pos_flag in outlier_date_pos_flags:
+        colors.append(normal_color)
+        if outlier_date_pos_flag:
+            colors.append(pos_outlier_color)
+        if not outlier_date_pos_flag:
+            colors.append(neg_outlier_color)
+    colors.append(normal_color)  # tail color
+
+    # 处理极端情况(outliers区间刚好在始末)
+    if outlier_date_splitters[0] == first_date:
+        outlier_date_splitters.pop(0)
+        colors.pop(0)
+    if outlier_date_splitters[-1] == last_date:
+        outlier_date_splitters.pop(-1)
+        colors.pop(-1)
+
+    assert len(colors) == len(outlier_date_splitters) + 1
+
+    print(close_a)
+    print(close_b)
+    print(dates)
+    print(ratio)
+    print(outlier_date_splitters)
+    print(colors)
 
     # i = 0
     # while i< max(n_neg_outliers,n_pos_outliers):
     #     pass
 
+    xo_pos = [i if y - mean > threshold else None for i, y in enumerate(yd)]
+    xo_neg = [i if y - mean < -threshold else None for i, y in enumerate(yd)]
+
     # 可视化时间序列及离群点
     plt.figure(figsize=(12, 6))
     plt.plot(x, fitting_line, label='Time Series Data')
     plt.plot(x, ratio, label='Time Series Data')
-    # plt.plot(xo_neg, ratio, 'ro', markersize=8, label='Outliers')
-    # plt.plot(xo_pos, ratio, 'bo', markersize=8, label='Outliers')
+    plt.plot(xo_neg, ratio, 'ro', markersize=8, label='Outliers')
+    plt.plot(xo_pos, ratio, 'bo', markersize=8, label='Outliers')
     plt.xlabel('Time')
     plt.ylabel('Value')
     plt.title('Outliers Detection in Time Series Data using 3 Sigma Method')
@@ -143,4 +179,4 @@ def main(duration_in, degree, code_a, code_b, threshold_arg):
     plt.show()
 
 
-main('5y', 3, 'HSI', 'SPX', 1.1)
+main('5y', 2, 'HSI', 'SPX', 1.5)
