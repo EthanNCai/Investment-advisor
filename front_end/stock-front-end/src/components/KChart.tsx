@@ -1,16 +1,14 @@
 import { StockContext } from "./interfaces.tsx";
-import { LineChart ,lineElementClasses,
-  markElementClasses,} from "@mui/x-charts/LineChart";
-import React, { useContext } from "react";
-import { Stack } from "@mui/material";
+import { LineChart } from "@mui/x-charts/LineChart";
+import  { useContext } from "react";
+import { Stack, Box } from "@mui/material";
 import { RadioSelector } from "./RadioSelector.tsx";
 import Skeleton from "@mui/material/Skeleton";
 import { ChartsReferenceLine } from '@mui/x-charts/ChartsReferenceLine';
 
 
-
 export const KChart = () => {
-  const { kChartInfo ,duration,setDuration} = useContext(StockContext)!;
+  const { kChartInfo ,duration,setDuration,threshold_arg} = useContext(StockContext)!;
   function formatDate(date: Date): string {
     const year = date.getFullYear();
     const month = (date.getMonth() + 1).toString().padStart(2, "0");
@@ -20,27 +18,35 @@ export const KChart = () => {
 
   return (
     <Stack>
-      <RadioSelector
-          title={"时间跨度"}
-          option_labels={["最大", "五年", "两年", "一年", "一季", "一月"]}
-          available_options={["maximum", "5y","2y", "1y","1q", "1m"]}
-          current_option={duration}
-          set_current_option={setDuration}
-      />
+      <Box justifyContent="center"display="flex"
+
+           alignItems="center">
+        <RadioSelector
+            title={"时间跨度"}
+            option_labels={["最大", "五年", "两年", "一年", "一季"]}
+            available_options={["maximum", "5y","2y", "1y","1q"]}
+            current_option={duration}
+            set_current_option={setDuration}
+        />
+      </Box>
+
       {kChartInfo ? (
-          <Stack direction="row" spacing={0}>
+          <Stack direction="column" spacing={0}>
         <LineChart
             skipAnimation = {false}
           series={[
             {
               showMark: false,
-              data: kChartInfo?.ratio, label:'ratio',id:"ratio"
+              data: kChartInfo?.ratio, label:'A和B的收盘价比',id:"ratio",
+              color:"#2196f3"
 
 
               // area: true,
             },{
               showMark: false,
-              data: kChartInfo?.fitting_line, label:'fitting',id:"fitting"
+              curve: "natural",
+              data: kChartInfo?.fitting_line, label:'多项式拟合线',id:"fitting",
+              color:'red'
 
               // area: true,
             },
@@ -60,11 +66,16 @@ export const KChart = () => {
           ]}
           height={300}
             sx={{
-              [`.${lineElementClasses.root}, .${markElementClasses.root}`]: {
-                strokeWidth: 1,
-              },
+
+              '.MuiLineElement-series-ratio': {
+                strokeWidth: duration === 'maximum' || duration === '5y' || duration === '2y' ? 1 : 2
+              }
+              ,
               '.MuiLineElement-series-fitting': {
                 strokeDasharray: '5 5',
+                strokeWidth:3
+
+
               },
 
 
@@ -78,8 +89,10 @@ export const KChart = () => {
                 series={[
                   {
                     showMark: false,
-                    data: kChartInfo?.delta, label:'ratio',id:"ratio",
+                    data: kChartInfo?.delta, label:'收盘价比与拟合线的差值',id:"ratio",
                     area: true
+                    ,color:'#bbdefb'
+
                   },
                 ]}
                 xAxis={[
@@ -96,14 +109,14 @@ export const KChart = () => {
                     colorMap:
                       {
                         type: 'piecewise',
-                        thresholds: [- kChartInfo?.thres,  kChartInfo?.thres],
-                        colors: ['red','#E2E2E2', 'green'],
+                        thresholds: [- threshold_arg * kChartInfo?.threshold,  threshold_arg * kChartInfo?.threshold],
+                        colors: ['#C96868','#bbdefb', '#15B392'],
                       }
                   },
                 ]}
                 height={300}
             >
-              {kChartInfo?.outlier_date_splitters.map(()=>(<ChartsReferenceLine y={0} lineStyle={{ stroke: 'red' }} />))}
+              <ChartsReferenceLine y={0} lineStyle={{ stroke: 'red' ,strokeWidth:3,strokeDasharray: '5 5',}} />
 
             </LineChart>
             </Stack>

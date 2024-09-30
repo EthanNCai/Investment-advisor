@@ -1,4 +1,4 @@
-import React from "react";
+import React, {useState} from "react";
 import Slider from "@mui/material/Slider";
 import { Stack } from "@mui/material";
 import Typography from "@mui/material/Typography";
@@ -19,8 +19,14 @@ export const SliderSelector: React.FC<SliderSelectorProps> = ({
                                                               min,
     max,step
                                                               }) => {
+
+
+    const [temp_value,setTemp_value]  = useState(current_value);
     const handleChange = (_: Event, newValue: number | number[]) => {
-        set_current_value(newValue as number);
+        setTemp_value(newValue as number);
+    };
+    const handleCommit = () => {
+        set_current_value(temp_value as number);
     };
 
     return (
@@ -28,14 +34,14 @@ export const SliderSelector: React.FC<SliderSelectorProps> = ({
             <Typography>{title}</Typography>
             <Slider
                 valueLabelDisplay="auto"
-                value={current_value}
+                value={temp_value}
                 onChange={handleChange}
+                onChangeCommitted={handleCommit}
                 aria-labelledby="continuous-slider"
                 step={step}
                 marks
                 min={min}
                 max={max}
-
             />
         </Stack>
     );

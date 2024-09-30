@@ -1,29 +1,30 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Button, Container, Stack } from "@mui/material";
 import Typography from "@mui/material/Typography";
 import TextField from "@mui/material/TextField";
 import { Box } from "@mui/system";
 import { useContext } from "react";
-import { StockContext } from "./interfaces.tsx";
-import { RadioSelector } from "./RadioSelector.tsx";
+import {StockContext, StockInfo} from "./interfaces.tsx";
 import {SliderSelector} from "./SliderSelector.tsx";
-interface Search_Result {
-  code: string;
-  name: string;
-  type: string;
-}
+
 export default function SearchBar() {
   const {
-    codeA,
-    setCodeA,
-    codeB,
-    setCodeB ,
+    stockInfoA,
+    setStockInfoA,
+    stockInfoB,
+    setStockInfoB ,
     degree,
     setDegree,
-  threshold,
-  setThreshold} = useContext(StockContext)!;
+    threshold_arg,
+    setThreshold_arg,
+
+
+
+  } = useContext(StockContext)!;
   const [search_keyword, setSearch_keyword] = useState("");
-  const [search_result, setSearchResult] = useState<Search_Result[]>([]);
+  const [stockInfos, setStockInfos] = useState<StockInfo[]>([]);
+
+
 
   useEffect(() => {
     const fetchData = async () => {
@@ -32,7 +33,7 @@ export default function SearchBar() {
           `http://localhost:8000/search_stocks/${search_keyword}`
         );
         const data = await response.json();
-        setSearchResult(data.result);
+        setStockInfos(data.result);
       } catch (error) {
         console.error("Error fetching data:", error);
       }
@@ -41,18 +42,28 @@ export default function SearchBar() {
     if (search_keyword !== "") {
       fetchData();
     } else {
-      setSearchResult([]); // Clear search results if search keyword is empty
+      setStockInfos([]); // Clear search results if search keyword is empty
     }
   }, [search_keyword]);
 
   return (
     <Container>
       <Stack>
+        <Typography>
+          A:
+
+          {stockInfoA.name ? stockInfoA.name : "未选定"}
+        </Typography>
+        <Typography>
+          B:
+
+          {stockInfoB.name ? stockInfoB.name : "未选定"}
+        </Typography>
         <SliderSelector
             title={"拟合曲线阶"}
             current_value={degree}
             set_current_value={setDegree}
-            max={20}
+            max={8}
             min={1}
             step={1}
         />
@@ -60,11 +71,11 @@ export default function SearchBar() {
 
         <SliderSelector
             title={"异常值门限"}
-            current_value={threshold}
-            set_current_value={setThreshold}
+            current_value={threshold_arg}
+            set_current_value={setThreshold_arg}
             max={3}
             min={1}
-            step={0.1}
+            step={0.05}
         />
 
 
@@ -81,7 +92,7 @@ export default function SearchBar() {
         />
       </Stack>
 
-      {search_result.map((item: Search_Result) => (
+      {stockInfos.map((item: StockInfo) => (
         <Box key={item.code}>
           <Stack direction={"row"}>
             <Typography>{item.code}-</Typography>
@@ -89,10 +100,10 @@ export default function SearchBar() {
             <Typography>-{item.type}</Typography>
             <Button
               onClick={() => {
-                if (codeB === item.code) {
+                if (stockInfoB.code === item.code) {
                   alert("A和B不能相同");
                 } else {
-                  setCodeA(item.code);
+                  setStockInfoA({...item})
                 }
               }}
             >
@@ -100,10 +111,10 @@ export default function SearchBar() {
             </Button>
             <Button
               onClick={() => {
-                if (codeA === item.code) {
+                if (stockInfoA.code === item.code) {
                   alert("A和B不能相同");
                 } else {
-                  setCodeB(item.code);
+                  setStockInfoB({...item})
                 }
               }}
             >
@@ -112,16 +123,7 @@ export default function SearchBar() {
           </Stack>
         </Box>
       ))}
-      <Typography>
-        A:
-        <br />
-        {codeA ? codeA : "none"}
-      </Typography>
-      <Typography>
-        B:
-        <br />
-        {codeB ? codeB : "none"}
-      </Typography>
+
     </Container>
   );
 }

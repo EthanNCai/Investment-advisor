@@ -1,30 +1,31 @@
 import { Box } from "@mui/system";
 import { Paper } from "@mui/material";
 import SearchBar from "./Search.tsx";
-import React, { useEffect, useState } from "react";
-import {StockContext, KChartInfo, UserOptionInfo} from "./interfaces.tsx";
+import  { useEffect, useState } from "react";
+import {StockContext, KChartInfo, UserOptionInfo, StockInfo} from "./interfaces.tsx";
 
 import { KChart } from "./KChart.tsx";
 const MainLayout = () => {
-  const [code_a, setCode_a] = useState("");
-  const [code_b, setCode_b] = useState("");
-  const [degree, setDegree] = useState(3);
-  const [duration, setDuration] = useState('1m');
-  const [threshold, setThreshold] = useState(1.5);
+
+  const [degree, setDegree] = useState(2);
+  const [duration, setDuration] = useState('1y');
+  const [threshold_arg, setThreshold_arg] = useState(1.5);
   const [kChartInfo, setKChartInfo] = useState<KChartInfo | undefined>(
     undefined
   );
+    const [stockInfoA, setStockInfoA] = useState<StockInfo>({name:"",code:"",type:""});
+    const [stockInfoB, setStockInfoB] = useState<StockInfo>({name:"",code:"",type:""});
 
   useEffect(() => {
     const fetchKChartInfo = () => {
-      if (code_a === "" || code_b === "") {
+      if (stockInfoA.code === "" || stockInfoB.code === "") {
         return;
       }
       const user_option_info: UserOptionInfo = {
-          code_a:code_a,
-          code_b:code_b,
+          code_a:stockInfoA.code,
+          code_b:stockInfoB.code,
           duration:duration,
-          threshold:threshold,
+          // threshold_arg:threshold,
           degree:degree
       }
       return fetch(`http://localhost:8000/get_k_chart_info/`,{
@@ -49,26 +50,25 @@ const MainLayout = () => {
           console.error("Error fetching data:", error);
         });
     };
-    if (code_a !== "") {
-      fetchKChartInfo();
-      console.log(kChartInfo);
-    }
-  }, [code_a, code_b,duration,degree,threshold]);
+    fetchKChartInfo();
+
+  }, [stockInfoA, stockInfoB, duration,degree]);
 
   return (
     <StockContext.Provider
       value={{
-        codeA: code_a,
-        setCodeA: setCode_a,
-        codeB: code_b,
-        setCodeB: setCode_b,
+
         kChartInfo: kChartInfo,
         degree:degree,
         setDegree:setDegree,
         duration:duration,
         setDuration:setDuration,
-        threshold:threshold,
-        setThreshold:setThreshold,
+        threshold_arg:threshold_arg,
+        setThreshold_arg:setThreshold_arg,
+          stockInfoA:stockInfoA,
+          setStockInfoA:setStockInfoA,
+          stockInfoB:stockInfoB,
+          setStockInfoB:setStockInfoB ,
       }}
     >
       <Box>
@@ -80,15 +80,16 @@ const MainLayout = () => {
               sm: "row",
               lg: "row",
             },
+              gap: 2,
           }}
         >
           <Box sx={{ flex: 2 }}>
-            <Paper>
+            <Paper elevation={3}>
               <KChart />
             </Paper>
           </Box>
           <Box sx={{ flex: 1 }}>
-            <Paper>
+            <Paper elevation={3}>
               <SearchBar />
             </Paper>
           </Box>

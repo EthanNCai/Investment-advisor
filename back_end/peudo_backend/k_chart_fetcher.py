@@ -86,9 +86,9 @@ def k_chart_fetcher(code_a, code_b,duration_in, degree, threshold_arg):
     if duration_days == -1 or duration_days >= len(close_a):
         duration_days = len(close_a)
 
-    close_a = close_a[:duration_days]
-    close_b = close_b[:duration_days]
-    dates = dates[:duration_days]
+    close_a = close_a[-duration_days:]
+    close_b = close_b[-duration_days:]
+    dates = dates[-duration_days:]
 
     first_date = dates[0]
     last_date = dates[-1]
@@ -107,62 +107,62 @@ def k_chart_fetcher(code_a, code_b,duration_in, degree, threshold_arg):
     yd = np.array(delta)
     mean = np.mean(yd)
     std_dev = np.std(yd)
-    threshold = threshold_arg * std_dev
+    threshold =  std_dev
 
     # 找到离群点的index
 
-    xo = []
-    for i, y in enumerate(yd):
-        if y - mean > threshold:
-            xo.append((i, True))
-        elif y - mean < -threshold:
-            xo.append((i, False))
-
-    # 获得离群点的dates
-    n_outliers = len(xo)
-    outlier_dates = [(dates[i], isPos) for i, isPos in xo]
-
-    if not outlier_dates:
-        return {"close_a": close_a,
-                "close_b": close_b,
-                "dates": dates,
-                "ratio": ratio,
-                "outlier_date_splitters": [],
-                "colors": ['gray'],
-                "fitting_line": fitting_line,
-                "delta":delta,
-                "thres":threshold
-                }
-
-    # 这一步很有意思，吧离散的date用区间的概念体现出来，返回的是这些区间的分割点
-    outlier_date_splitters, outlier_date_pos_flags = convert_dates_to_splitters(outlier_dates)
-
-    assert len(outlier_date_splitters) == len(outlier_date_pos_flags) * 2
-    # print(outlier_date_splitters)
-    # print(outlier_date_pos_flags)
-
-    pos_outlier_color = 'blue'
-    normal_color = 'black'
-    neg_outlier_color = 'red'
-
-    colors = []
-    for outlier_date_pos_flag in outlier_date_pos_flags:
-        colors.append(normal_color)
-        if outlier_date_pos_flag:
-            colors.append(pos_outlier_color)
-        if not outlier_date_pos_flag:
-            colors.append(neg_outlier_color)
-    colors.append(normal_color)  # tail color
-
-    # 处理极端情况(outliers区间刚好在始末)
-    if outlier_date_splitters[0] == first_date:
-        outlier_date_splitters.pop(0)
-        colors.pop(0)
-    if outlier_date_splitters[-1] == last_date:
-        outlier_date_splitters.pop(-1)
-        colors.pop(-1)
-
-    assert len(colors) == len(outlier_date_splitters) + 1
+    # xo = []
+    # for i, y in enumerate(yd):
+    #     if y - mean > threshold:
+    #         xo.append((i, True))
+    #     elif y - mean < -threshold:
+    #         xo.append((i, False))
+    #
+    # # 获得离群点的dates
+    # n_outliers = len(xo)
+    # outlier_dates = [(dates[i], isPos) for i, isPos in xo]
+    #
+    # if not outlier_dates:
+    #     return {"close_a": close_a,
+    #             "close_b": close_b,
+    #             "dates": dates,
+    #             "ratio": ratio,
+    #             "outlier_date_splitters": [],
+    #             "colors": ['gray'],
+    #             "fitting_line": fitting_line,
+    #             "delta":delta,
+    #             "thres":threshold
+    #             }
+    #
+    # # 这一步很有意思，吧离散的date用区间的概念体现出来，返回的是这些区间的分割点
+    # outlier_date_splitters, outlier_date_pos_flags = convert_dates_to_splitters(outlier_dates)
+    #
+    # assert len(outlier_date_splitters) == len(outlier_date_pos_flags) * 2
+    # # print(outlier_date_splitters)
+    # # print(outlier_date_pos_flags)
+    #
+    # pos_outlier_color = 'blue'
+    # normal_color = 'black'
+    # neg_outlier_color = 'red'
+    #
+    # colors = []
+    # for outlier_date_pos_flag in outlier_date_pos_flags:
+    #     colors.append(normal_color)
+    #     if outlier_date_pos_flag:
+    #         colors.append(pos_outlier_color)
+    #     if not outlier_date_pos_flag:
+    #         colors.append(neg_outlier_color)
+    # colors.append(normal_color)  # tail color
+    #
+    # # 处理极端情况(outliers区间刚好在始末)
+    # if outlier_date_splitters[0] == first_date:
+    #     outlier_date_splitters.pop(0)
+    #     colors.pop(0)
+    # if outlier_date_splitters[-1] == last_date:
+    #     outlier_date_splitters.pop(-1)
+    #     colors.pop(-1)
+    #
+    # assert len(colors) == len(outlier_date_splitters) + 1
 
     # print(close_a)
     # print(close_b)
@@ -175,11 +175,11 @@ def k_chart_fetcher(code_a, code_b,duration_in, degree, threshold_arg):
             "close_b":close_b,
             "dates":dates,
             "ratio":ratio,
-            "outlier_date_splitters":outlier_date_splitters,
-            "colors":colors,
+            # "outlier_date_splitters":outlier_date_splitters,
+            # "colors":colors,
             "fitting_line":fitting_line,
             "delta":delta,
-            "thres":threshold}
+            "threshold":threshold}
 
     # i = 0
     # while i< max(n_neg_outliers,n_pos_outliers):

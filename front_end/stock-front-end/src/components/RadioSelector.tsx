@@ -27,7 +27,7 @@ export const RadioSelector: React.FC<RadioSelectorProps> = ({
     };
 
     return (
-        <Stack direction="row" spacing={2}>
+        <Stack direction="row" spacing={2}  alignItems="center" sx={{ padding: "10px" }}>
             <Typography> {title}</Typography>
             <FormControl>
 

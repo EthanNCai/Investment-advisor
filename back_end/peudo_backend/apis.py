@@ -40,11 +40,10 @@ class DataModel(BaseModel):
     code_b: str
     degree: int
     duration: str
-    threshold: float
 
 @app.post("/get_k_chart_info/")
 async def receive_data(data: DataModel):
-    ret = k_chart_fetcher(data.code_a, data.code_b, data.duration, data.degree,  data.threshold)
+    ret = k_chart_fetcher(data.code_a, data.code_b, data.duration, data.degree, None)
     return ret
 
 
