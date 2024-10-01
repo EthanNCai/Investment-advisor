@@ -6,7 +6,7 @@ import { RadioSelector } from "./RadioSelector.tsx";
 import Skeleton from "@mui/material/Skeleton";
 import { ChartsReferenceLine } from '@mui/x-charts/ChartsReferenceLine';
 import {CheckSelector} from "./CheckSelector.tsx";
-import Typography from "@mui/material/Typography";
+// import Typography from "@mui/material/Typography";
 
 
 export const KChart = () => {

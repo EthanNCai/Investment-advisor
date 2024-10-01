@@ -1,6 +1,32 @@
 
+目前后端仅有两个API
 
-get_k_chart_info (POST)
+
+
+1./search_stocks/${search_keyword} (GET请求)
+
+
+receive
+
+```json
+{
+  "result": [
+  {
+    "name": "",
+    "code": "",
+    "type": ""
+  },
+  {
+    "name": "",
+    "code": "",
+    "type": ""
+  }
+]}
+
+```
+
+
+2./get_k_chart_info (POST请求)
 
 send
 ```json
