@@ -30,7 +30,7 @@ export const SliderSelector: React.FC<SliderSelectorProps> = ({
     };
 
     return (
-        <Stack direction="row" spacing={2} alignItems="center">
+        <Stack direction="column" spacing={0} >
             <Typography>{title}</Typography>
             <Slider
                 valueLabelDisplay="auto"

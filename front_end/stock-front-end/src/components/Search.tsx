@@ -6,6 +6,7 @@ import { Box } from "@mui/system";
 import { useContext } from "react";
 import {StockContext, StockInfo} from "./interfaces.tsx";
 import {SliderSelector} from "./SliderSelector.tsx";
+import {StockDivision} from "./StockDivision.tsx";
 
 export default function SearchBar() {
   const {
@@ -49,16 +50,10 @@ export default function SearchBar() {
   return (
     <Container>
       <Stack>
-        <Typography>
-          A:
 
-          {stockInfoA.name ? stockInfoA.name : "未选定"}
-        </Typography>
-        <Typography>
-          B:
 
-          {stockInfoB.name ? stockInfoB.name : "未选定"}
-        </Typography>
+
+        <StockDivision stockA={stockInfoA}  stockB={stockInfoB}/>
         <SliderSelector
             title={"拟合曲线阶"}
             current_value={degree}
@@ -81,24 +76,27 @@ export default function SearchBar() {
 
 
         <TextField
+            sx={{marginY:"15px"}}
           onChange={(event) => {
             const newValue = event.target.value;
             if (newValue !== null) {
               setSearch_keyword(newValue);
             }
           }}
-          label="Search"
+          label="搜索股票代码/名称"
           variant="outlined"
         />
       </Stack>
 
       {stockInfos.map((item: StockInfo) => (
         <Box key={item.code}>
-          <Stack direction={"row"}>
-            <Typography>{item.code}-</Typography>
-            <Typography>{item.name}</Typography>
-            <Typography>-{item.type}</Typography>
+          <Stack direction={"row"} justifyContent={'space-between'}>
+            <Box>
+            <Typography>{item.code}-{item.name}-{item.type}</Typography>
+            </Box>
+            <Box>
             <Button
+
               onClick={() => {
                 if (stockInfoB.code === item.code) {
                   alert("A和B不能相同");
@@ -110,6 +108,7 @@ export default function SearchBar() {
               作为A
             </Button>
             <Button
+
               onClick={() => {
                 if (stockInfoA.code === item.code) {
                   alert("A和B不能相同");
@@ -120,6 +119,7 @@ export default function SearchBar() {
             >
               作为B
             </Button>
+            </Box>
           </Stack>
         </Box>
       ))}

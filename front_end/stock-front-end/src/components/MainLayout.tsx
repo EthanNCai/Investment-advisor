@@ -1,10 +1,11 @@
 import { Box } from "@mui/system";
-import { Paper } from "@mui/material";
+
 import SearchBar from "./Search.tsx";
 import  { useEffect, useState } from "react";
 import {StockContext, KChartInfo, UserOptionInfo, StockInfo} from "./interfaces.tsx";
 
 import { KChart } from "./KChart.tsx";
+import {Paper} from "@mui/material";
 const MainLayout = () => {
 
   const [degree, setDegree] = useState(2);
@@ -15,6 +16,9 @@ const MainLayout = () => {
   );
     const [stockInfoA, setStockInfoA] = useState<StockInfo>({name:"",code:"",type:""});
     const [stockInfoB, setStockInfoB] = useState<StockInfo>({name:"",code:"",type:""});
+    const [showRatio, setShowRatio] = useState(true);
+    const [showDelta, setShowDelta] = useState(true);
+
 
   useEffect(() => {
     const fetchKChartInfo = () => {
@@ -69,30 +73,39 @@ const MainLayout = () => {
           setStockInfoA:setStockInfoA,
           stockInfoB:stockInfoB,
           setStockInfoB:setStockInfoB ,
+          showDelta:showDelta,
+          setShowDelta:setShowDelta ,
+          showRatio:showRatio,
+          setShowRatio:setShowRatio,
       }}
     >
       <Box>
+
         <Box
           sx={{
             display: "flex",
             flexDirection: {
               xs: "column",
-              sm: "row",
+              sm: "column",
               lg: "row",
             },
               gap: 2,
           }}
         >
-          <Box sx={{ flex: 2 }}>
-            <Paper elevation={3}>
-              <KChart />
-            </Paper>
-          </Box>
+
           <Box sx={{ flex: 1 }}>
-            <Paper elevation={3}>
+              <Paper>
+            <Box sx={{padding:"10px"}}>
               <SearchBar />
-            </Paper>
+            </Box>
+              </Paper>
           </Box>
+
+            <Box sx={{ flex: 2 }}>
+                <Box >
+                    <KChart />
+                </Box>
+            </Box>
         </Box>
       </Box>
     </StockContext.Provider>

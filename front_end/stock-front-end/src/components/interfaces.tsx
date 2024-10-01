@@ -13,6 +13,11 @@ export interface StockContextInterface {
   setStockInfoA:React.Dispatch<React.SetStateAction<StockInfo>>;
   stockInfoB:StockInfo;
   setStockInfoB:React.Dispatch<React.SetStateAction<StockInfo>>;
+  showRatio:boolean;
+  setShowRatio:React.Dispatch<React.SetStateAction<boolean>>;
+  showDelta:boolean;
+  setShowDelta:React.Dispatch<React.SetStateAction<boolean>>;
+
 }
 
 export interface UserOptionInfo{
