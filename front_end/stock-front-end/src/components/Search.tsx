@@ -31,7 +31,7 @@ export default function SearchBar() {
     const fetchData = async () => {
       try {
         const response = await fetch(
-          `http://localhost:8000/search_stocks/${search_keyword}`
+          `http://192.168.1.220:8000/search_stocks/${search_keyword}`
         );
         const data = await response.json();
         setStockInfos(data.result);

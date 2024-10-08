@@ -7,7 +7,10 @@ import MainLayout from "./components/MainLayout.tsx";
 function App() {
 
   return (
-      <><CssBaseline/>
+      <>
+          <CssBaseline/>
+
+          <>
           <div
               style={{
                   position: "fixed",
@@ -19,11 +22,11 @@ function App() {
               <MenuAppBar/>
           </div>
 
-          <Container maxWidth="lg" sx={{ padding: "0px", marginTop: "100px" }}>
+          <Container  maxWidth="lg" sx={{  marginTop: "100px" }}>
 
               <MainLayout/>
           </Container>
-
+</>
       </>
   )
 }

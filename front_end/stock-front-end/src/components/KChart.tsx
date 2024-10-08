@@ -21,7 +21,7 @@ export const KChart = () => {
   return (
     <Stack spacing={0} >
 
-      <Box justifyContent="center"display="flex"
+      <Box justifyContent="center" display="flex"
           gap={0}
            alignItems="center">
 
@@ -34,7 +34,7 @@ export const KChart = () => {
         />
 
       </Box>
-      <Box justifyContent="center"display="flex"
+      <Box justifyContent="center" display="flex"
 
            alignItems="center">
 

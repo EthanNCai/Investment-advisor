@@ -32,7 +32,7 @@ const MainLayout = () => {
           // threshold_arg:threshold,
           degree:degree
       }
-      return fetch(`http://localhost:8000/get_k_chart_info/`,{
+      return fetch(`http://192.168.1.220:8000/get_k_chart_info/`,{
             method: "POST",
                 headers: {
                 "Content-Type": "application/json",
@@ -59,6 +59,7 @@ const MainLayout = () => {
   }, [stockInfoA, stockInfoB, duration,degree]);
 
   return (
+
     <StockContext.Provider
       value={{
 
