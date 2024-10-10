@@ -14,11 +14,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 """
 前端请求样例
 http://192.168.1.220:8000/search_stocks/我是关键词
 """
+
+
 @app.get("/search_stocks/{keyword}")
 def search_stocks(keyword: str):
     with open('stock_list.json', 'r', encoding='utf-8') as file:
@@ -51,6 +52,8 @@ class DataModel(BaseModel):
   "degree": 3
 }
 """
+
+
 @app.post("/get_k_chart_info/")
 async def receive_data(data: DataModel):
     ret = k_chart_fetcher(data.code_a, data.code_b, data.duration, data.degree, None)
@@ -60,4 +63,4 @@ async def receive_data(data: DataModel):
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="192.168.1.220", port=8000)
+    uvicorn.run(app, host="localhost", port=8000)
