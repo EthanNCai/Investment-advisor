@@ -1,11 +1,10 @@
 import MenuAppBar from "./components/MenuAppBar.tsx";
 import {Container, CssBaseline} from "@mui/material";
 import MainLayout from "./components/MainLayout.tsx";
-
-
+import { Routes, Route } from "react-router-dom";
+import AssetSelection from "./components/AssetSelection/AssetSelection.tsx";
 
 function App() {
-
   return (
       <>
           <CssBaseline/>
@@ -22,11 +21,13 @@ function App() {
               <MenuAppBar/>
           </div>
 
-          <Container  maxWidth="lg" sx={{  marginTop: "100px" }}>
-
-              <MainLayout/>
+          <Container maxWidth="lg" sx={{ marginTop: "100px" }}>
+              <Routes>
+                  <Route path="/" element={<MainLayout />} />
+                  <Route path="/assets" element={<AssetSelection />} />
+              </Routes>
           </Container>
-</>
+          </>
       </>
   )
 }

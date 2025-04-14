@@ -18,42 +18,43 @@ export default function SearchBar() {
     setDegree,
     threshold_arg,
     setThreshold_arg,
-
-
-
   } = useContext(StockContext)!;
   const [search_keyword, setSearch_keyword] = useState("");
   const [stockInfos, setStockInfos] = useState<StockInfo[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
 
-
-
+  // 使用防抖函数优化搜索，避免频繁请求
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const response = await fetch(
-          `http://localhost:8000/search_stocks/${search_keyword}`
-        );
-        const data = await response.json();
-        setStockInfos(data.result);
-      } catch (error) {
-        console.error("Error fetching data:", error);
+    const debounceTimeout = setTimeout(() => {
+      if (search_keyword !== "") {
+        setIsSearching(true);
+        fetchData();
+      } else {
+        setStockInfos([]); // 清空搜索结果
       }
-    };
+    }, 300); // 300ms延迟，减少请求频率
 
-    if (search_keyword !== "") {
-      fetchData();
-    } else {
-      setStockInfos([]); // Clear search results if search keyword is empty
-    }
+    return () => clearTimeout(debounceTimeout);
   }, [search_keyword]);
+
+  const fetchData = async () => {
+    try {
+      const response = await fetch(
+        `http://localhost:8000/search_stocks/${search_keyword}`
+      );
+      const data = await response.json();
+      setStockInfos(data.result);
+      setIsSearching(false);
+    } catch (error) {
+      console.error("Error fetching data:", error);
+      setIsSearching(false);
+    }
+  };
 
   return (
     <Container>
       <Stack>
-
-
-
-        <StockDivision stockA={stockInfoA}  stockB={stockInfoB}/>
+        <StockDivision stockA={stockInfoA} stockB={stockInfoB}/>
         <SliderSelector
             title={"拟合曲线阶"}
             current_value={degree}
@@ -62,7 +63,6 @@ export default function SearchBar() {
             min={1}
             step={1}
         />
-
 
         <SliderSelector
             title={"异常值门限"}
@@ -73,18 +73,15 @@ export default function SearchBar() {
             step={0.05}
         />
 
-
-
         <TextField
             sx={{marginY:"15px"}}
-          onChange={(event) => {
-            const newValue = event.target.value;
-            if (newValue !== null) {
+            onChange={(event) => {
+              const newValue = event.target.value;
               setSearch_keyword(newValue);
-            }
-          }}
-          label="搜索股票代码/名称"
-          variant="outlined"
+            }}
+            label="搜索股票代码/名称"
+            variant="outlined"
+            helperText={isSearching ? "搜索中..." : "实时搜索，输入即可显示结果"}
         />
       </Stack>
 
@@ -96,7 +93,6 @@ export default function SearchBar() {
             </Box>
             <Box>
             <Button
-
               onClick={() => {
                 if (stockInfoB.code === item.code) {
                   alert("A和B不能相同");
@@ -108,7 +104,6 @@ export default function SearchBar() {
               作为A
             </Button>
             <Button
-
               onClick={() => {
                 if (stockInfoA.code === item.code) {
                   alert("A和B不能相同");
@@ -123,7 +118,6 @@ export default function SearchBar() {
           </Stack>
         </Box>
       ))}
-
     </Container>
   );
 }

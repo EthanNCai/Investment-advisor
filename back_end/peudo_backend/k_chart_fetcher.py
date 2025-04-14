@@ -3,6 +3,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
 
+from get_stock_data.stock_data_base import StockKlineDatabase
+
 durations = {'maximum': -1, '5y': 1825, '2y': 730, '1y': 365, '1q': 120, '1m': 30}
 
 
@@ -38,7 +40,7 @@ def date_alignment(close_a_, close_b_, dates_a_, dates_b_):
 
 def convert_dates_to_splitters(date_list) -> (list, list):
     if not date_list:
-        return [],[]
+        return [], []
 
     # 将字符串日期转换为datetime对象并排序
     dates = [datetime.strptime(date, "%Y-%m-%d") for date, _ in date_list]
@@ -66,32 +68,71 @@ def convert_dates_to_splitters(date_list) -> (list, list):
     return ranges, is_range_pos_flag
 
 
-def k_chart_fetcher(code_a, code_b,duration_in, degree, threshold_arg):
+def get_stock_data_pair(code_a: str, code_b: str) -> tuple:
+    """
+    从数据库获取两只股票的日期和收盘价
+    返回格式：(dates_a, close_a, dates_b, close_b)
+    """
+
+    def fetch_single_stock(code: str) -> tuple:
+        """获取单只股票数据，返回 (日期列表, 收盘价列表)"""
+        db = StockKlineDatabase()
+        # 查询全部历史数据
+        records = db.query_kline(
+            stock_code=code,
+            start_date='2015-01-01',
+            end_date=datetime.now().strftime('%Y-%m-%d')
+        )
+
+        if not records:
+            raise ValueError(f"股票 {code} 无可用数据")
+
+        # 按日期升序排序
+        sorted_records = sorted(records, key=lambda x: x[1])
+
+        # 拆分成日期和收盘价列表
+        dates = [record[1] for record in sorted_records]  # date字段位置
+        closes = [float(record[3]) for record in sorted_records]  # close字段位置
+        if len(dates) != len(closes):
+            raise ValueError(f"股票 {code} 数据异常：日期与收盘价数量不匹配")
+
+        if len(dates) == 0:
+            raise ValueError(f"股票 {code} 无有效数据")
+        return dates, closes
+
+    # 获取两只股票数据
+    dates_a, close_a = fetch_single_stock(code_a)
+    dates_b, close_b = fetch_single_stock(code_b)
+
+    return close_a, close_b, dates_a, dates_b
+
+
+def k_chart_fetcher(code_a, code_b, duration_in, degree, threshold_arg):
     # 第一步：拿到需要的两个股票的收盘价list
 
-    with open('../peudo_backend/stock_info_base.json', 'r', encoding='utf-8') as file:
-        stock_info_base = json.load(file)
+    # with open('../peudo_backend/stock_info_base.json', 'r', encoding='utf-8') as file:
+    #     stock_info_base = json.load(file)
 
     # 从数据库里面读取 两只股票的dates和close (日期&收盘价)
-    close_a_: list = stock_info_base[code_a]['close']
-    close_b_: list = stock_info_base[code_b]['close']
-    dates_a_: list = stock_info_base[code_a]['dates']
-    dates_b_: list = stock_info_base[code_b]['dates']
+    # close_a_: list = stock_info_base[code_a]['close']
+    # close_b_: list = stock_info_base[code_b]['close']
+    # dates_a_: list = stock_info_base[code_a]['dates']
+    # dates_b_: list = stock_info_base[code_b]['dates']
+    close_a_, close_b_, dates_a_, dates_b_ = get_stock_data_pair(code_a, code_b)
 
     # 需要注意的是，两个股票不一定交易日是重叠的，所以我们只取二者交易日的交集最终计算ratio，我将其称之为日期的alignment
     close_a, close_b, dates = date_alignment(close_a_, close_b_, dates_a_, dates_b_)
 
     assert len(close_a) == len(close_b)
     assert len(close_a) == len(dates)
-
     duration_days = durations[duration_in]
-
     if duration_days == -1 or duration_days >= len(close_a):
         duration_days = len(close_a)
 
     close_a = close_a[-duration_days:]
     close_b = close_b[-duration_days:]
     dates = dates[-duration_days:]
+    # print(dates)
 
     ratio = [float(a) / float(b) for a, b in zip(close_a, close_b)]
 
@@ -100,7 +141,6 @@ def k_chart_fetcher(code_a, code_b,duration_in, degree, threshold_arg):
     x = np.arange(len(ratio))
     coefficients = np.polyfit(x, y, int(degree))
     poly = np.poly1d(coefficients)
-
 
     fitting_line = poly(x).tolist()
     delta = [r - f for r, f in zip(ratio, fitting_line)]
@@ -112,12 +152,10 @@ def k_chart_fetcher(code_a, code_b,duration_in, degree, threshold_arg):
 
     # 找到离群点的index
 
-    return {"close_a":close_a,
-            "close_b":close_b,
-            "dates":dates,
-            "ratio":ratio,
-            "fitting_line":fitting_line,
-            "delta":delta,
-            "threshold":threshold}
-
-
+    return {"close_a": close_a,
+            "close_b": close_b,
+            "dates": dates,
+            "ratio": ratio,
+            "fitting_line": fitting_line,
+            "delta": delta,
+            "threshold": threshold}
