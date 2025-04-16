@@ -123,23 +123,27 @@ const RatioAnalysis: React.FC = () => {
         body: JSON.stringify({
           code_a: stockA,
           code_b: stockB,
-          duration: duration, // 使用传入的参数值，而不是状态
+          duration: duration, 
           degree: degree,
           threshold_arg: threshold
         }),
       });
       
       const data = await response.json();
-      setChartData(data);
+      
+      // 计算并更新上下界值，确保数据一致性
+      const updatedData = updateBoundsInData(data, threshold);
+      
+      // 设置新的图表数据
+      setChartData(updatedData);
       
       // 只显示通知，不再自动切换选项卡
-      if (data.anomaly_info.warning_level === 'high') {
+      if (updatedData.anomaly_info.warning_level === 'high') {
         notification.warning({
           message: '高风险预警',
           description: '检测到显著的价差异常值，请谨慎操作！',
           duration: 5
         });
-        // 移除自动切换到异常检测选项卡的代码
       }
     } catch (error) {
       console.error('Error fetching chart data:', error);
@@ -149,28 +153,40 @@ const RatioAnalysis: React.FC = () => {
     }
   };
 
+  // 统一计算边界值的辅助函数
+  const updateBoundsInData = (data: any, threshold: number) => {
+    if (!data || !data.anomaly_info) return data;
+    
+    // 计算新的上下界
+    const mean = data.anomaly_info.mean;
+    const std = data.anomaly_info.std;
+    const upperBound = mean + threshold * std;
+    const lowerBound = mean - threshold * std;
+    
+    // 返回更新了上下界的新对象
+    return {
+      ...data,
+      anomaly_info: {
+        ...data.anomaly_info,
+        upper_bound: upperBound,
+        lower_bound: lowerBound
+      }
+    };
+  };
+
   // 当阈值变化时更新边界
   const handleThresholdChange = (value: number) => {
     setAnomalyThreshold(value);
     
     // 如果图表数据已加载，则更新异常检测边界
     if (chartData) {
-      // 更新边界值（前端计算，不需要重新请求服务器）
-      const upperBound = chartData.anomaly_info.mean + value * chartData.anomaly_info.std;
-      const lowerBound = chartData.anomaly_info.mean - value * chartData.anomaly_info.std;
+      // 使用统一的方法更新上下界值
+      const updatedChartData = updateBoundsInData(chartData, value);
       
-      // 更新图表的markArea区域
-      setChartData({
-        ...chartData,
-        anomaly_info: {
-          ...chartData.anomaly_info,
-          upper_bound: upperBound,
-          lower_bound: lowerBound
-        }
-      });
+      // 更新状态
+      setChartData(updatedChartData);
       
       // 当用户手动调整阈值后，也发送请求获取新的异常检测结果
-      // 传入isThresholdAdjustment=true，标识这是阈值调整触发的更新
       if (selectedStockA && selectedStockB) {
         updateChart(selectedStockA, selectedStockB, selectedDuration, selectedDegree, value, true);
       }
@@ -197,6 +213,9 @@ const RatioAnalysis: React.FC = () => {
   // 比值图表配置
   const getRatioChartOption = () => {
     if (!chartData) return {};
+    
+    // 使用异常信息中的边界值
+    const { upper_bound, lower_bound } = chartData.anomaly_info;
     
     return {
       title: {
@@ -294,13 +313,13 @@ const RatioAnalysis: React.FC = () => {
             data: [
               [
                 {
-                  yAxis: chartData.anomaly_info.upper_bound,
+                  yAxis: upper_bound,
                   itemStyle: {
                     color: 'rgba(255, 77, 79, 0.1)'
                   }
                 },
                 {
-                  yAxis: chartData.anomaly_info.lower_bound
+                  yAxis: lower_bound
                 }
               ]
             ]
@@ -319,7 +338,7 @@ const RatioAnalysis: React.FC = () => {
         {
           name: '上边界',
           type: 'line',
-          data: Array(chartData.ratio.length).fill(chartData.anomaly_info.upper_bound),
+          data: Array(chartData.ratio.length).fill(upper_bound),
           lineStyle: {
             type: 'dotted',
             color: '#ff4d4f'
@@ -329,7 +348,7 @@ const RatioAnalysis: React.FC = () => {
         {
           name: '下边界',
           type: 'line',
-          data: Array(chartData.ratio.length).fill(chartData.anomaly_info.lower_bound),
+          data: Array(chartData.ratio.length).fill(lower_bound),
           lineStyle: {
             type: 'dotted',
             color: '#ff4d4f'

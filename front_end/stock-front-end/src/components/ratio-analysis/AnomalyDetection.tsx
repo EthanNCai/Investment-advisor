@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Slider, Typography, Card, Divider, Row, Col, Badge, Tag, Table } from 'antd';
 import { WarningOutlined, CheckCircleOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 
@@ -31,14 +31,14 @@ const AnomalyDetection: React.FC<AnomalyDetectionProps> = ({
   threshold,
   onThresholdChange
 }) => {
-  const [customThreshold, setCustomThreshold] = useState<number>(threshold);
-  
   const handleThresholdChange = (value: number) => {
-    setCustomThreshold(value);
     if (onThresholdChange) {
       onThresholdChange(value);
     }
   };
+
+  const upperBound = anomalyInfo.mean + threshold * anomalyInfo.std;
+  const lowerBound = anomalyInfo.mean - threshold * anomalyInfo.std;
 
   const getWarningLabel = (level: 'normal' | 'medium' | 'high') => {
     switch (level) {
@@ -113,8 +113,8 @@ const AnomalyDetection: React.FC<AnomalyDetectionProps> = ({
           <Card size="small" title="统计信息">
             <p><Text strong>均值:</Text> {anomalyInfo.mean.toFixed(4)}</p>
             <p><Text strong>标准差:</Text> {anomalyInfo.std.toFixed(4)}</p>
-            <p><Text strong>上界值:</Text> {(anomalyInfo.mean + customThreshold * anomalyInfo.std).toFixed(4)}</p>
-            <p><Text strong>下界值:</Text> {(anomalyInfo.mean - customThreshold * anomalyInfo.std).toFixed(4)}</p>
+            <p><Text strong>上界值:</Text> {upperBound.toFixed(4)}</p>
+            <p><Text strong>下界值:</Text> {lowerBound.toFixed(4)}</p>
           </Card>
         </Col>
         <Col span={12}>
@@ -124,7 +124,7 @@ const AnomalyDetection: React.FC<AnomalyDetectionProps> = ({
                 min={1}
                 max={5}
                 step={0.1}
-                value={customThreshold}
+                value={threshold}
                 onChange={handleThresholdChange}
                 marks={{
                   1: '1σ',
@@ -136,7 +136,7 @@ const AnomalyDetection: React.FC<AnomalyDetectionProps> = ({
                 tooltip={{ formatter: (value) => `${value}σ` }}
               />
               <div style={{ textAlign: 'center', marginTop: 8 }}>
-                <Text type="secondary">当前阈值: {customThreshold}σ (标准差的倍数)</Text>
+                <Text type="secondary">当前阈值: {threshold}σ (标准差的倍数)</Text>
               </div>
             </div>
           </Card>
