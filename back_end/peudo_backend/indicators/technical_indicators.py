@@ -278,14 +278,15 @@ def calculate_kdj(highs: np.ndarray, lows: np.ndarray, closes: np.ndarray, n: in
     }
 
 
-def calculate_price_ratio_anomaly(ratio_data: List[float], delta_data: List[float], threshold: float) -> Dict:
+def calculate_price_ratio_anomaly(ratio_data: List[float], delta_data: List[float], threshold_multiplier: float, std_value: float) -> Dict:
     """
-    计算价差异常值并生成预警信息，同时考虑Z分数和偏离度
+    计算价差异常值并生成预警信息，同时考虑Z分数、偏离度和绝对偏差阈值
     
     Args:
         ratio_data: 价差数据列表
         delta_data: 与拟合曲线的差值列表
-        threshold: 异常值检测阈值（标准差）
+        threshold_multiplier: 用户设置的阈值倍数（如2.0、3.0）
+        std_value: 原始数据的标准差值
         
     Returns:
         Dict: 包含异常值检测结果的字典
@@ -302,9 +303,12 @@ def calculate_price_ratio_anomaly(ratio_data: List[float], delta_data: List[floa
     
     # 计算基础统计值
     mean_ratio = sum(ratio_data) / len(ratio_data)
-    std = threshold  # 使用传入的标准差
+    std = std_value  # 使用传入的原始标准差
     
-    # 检测异常值 - 同时考虑Z分数和偏离度
+    # 计算绝对阈值 - 用户设置的阈值倍数乘以标准差
+    absolute_threshold = threshold_multiplier * std
+    
+    # 检测异常值 - 综合考虑多种指标
     anomalies = []
     # 先收集所有可能的异常点及其指标
     potential_anomalies = []
@@ -317,25 +321,41 @@ def calculate_price_ratio_anomaly(ratio_data: List[float], delta_data: List[floa
         deviation = (ratio - mean_ratio) / mean_ratio if mean_ratio != 0 else 0
         deviation_pct = abs(deviation * 100)  # 偏离百分比的绝对值
         
-        # 使用基础阈值初步筛选潜在异常点
-        if z_score > 2.0 or deviation_pct > 5.0:
+        # 计算绝对偏差 - 与拟合线的绝对差值
+        absolute_deviation = abs(delta)
+        
+        # 检查是否超过绝对阈值 (用户设置的阈值*标准差)
+        exceeds_absolute_threshold = absolute_deviation > absolute_threshold
+        
+        # 使用综合条件筛选潜在异常点
+        if z_score > 2.0 or deviation_pct > 5.0 or exceeds_absolute_threshold:
+            # 计算综合分数 - 考虑所有因素
+            # 基于Z分数，但增加偏离度的权重
+            combined_score = z_score * (1 + min(deviation_pct / 20, 1.0))
+            
+            # 如果超过绝对阈值，额外提高分数
+            if exceeds_absolute_threshold:
+                combined_score *= 1.2
+                
             potential_anomalies.append({
                 "index": i,
                 "value": ratio,
                 "z_score": z_score,
                 "deviation": deviation,
                 "deviation_pct": deviation_pct,
-                # 综合分数 = Z分数 * (1 + 归一化的偏离度影响)
-                "combined_score": z_score * (1 + min(deviation_pct / 20, 1.0))
+                "absolute_deviation": absolute_deviation,
+                "exceeds_threshold": exceeds_absolute_threshold,
+                "combined_score": combined_score
             })
     
     # 对潜在异常点按综合分数排序
     potential_anomalies.sort(key=lambda x: x["combined_score"], reverse=True)
     
-    # 取分数最高的点作为确认的异常点（最多取原始数据的10%或至少6个点）
-    max_anomalies = max(min(len(ratio_data) // 10, 20), 6)
+    # 取分数最高的点作为确认的异常点（最多取原始数据的15%，至少6个点）
+    max_anomalies = max(int(len(ratio_data) * 0.15), 6)
     for anomaly in potential_anomalies[:max_anomalies]:
-        if anomaly["combined_score"] > 2.0:  # 综合分数阈值
+        # 提高异常判定标准：综合分数必须大于2.0，或者超过绝对阈值
+        if anomaly["combined_score"] > 2.0 or anomaly["exceeds_threshold"]:
             anomalies.append({
                 "index": anomaly["index"],
                 "value": anomaly["value"],
@@ -343,28 +363,41 @@ def calculate_price_ratio_anomaly(ratio_data: List[float], delta_data: List[floa
                 "deviation": anomaly["deviation"]
             })
     
-    # 确定预警级别 - 使用综合评分而非仅Z分数
+    # 确定预警级别 - 使用综合评分、Z分数、偏离度和绝对阈值
     warning_level = "normal"
     if anomalies:
-        # 找出偏离度最大的异常点
+        # 找出各种异常指标的最大值
         max_deviation_anomaly = max(anomalies, key=lambda x: abs(x["deviation"]))
         max_z_score_anomaly = max(anomalies, key=lambda x: x["z_score"])
         
         max_deviation_pct = abs(max_deviation_anomaly["deviation"] * 100)
         max_z_score = max_z_score_anomaly["z_score"]
         
-        # 根据偏离度和Z分数综合判断风险级别
-        if (max_z_score > 3.0 and max_deviation_pct > 15.0) or max_deviation_pct > 25.0:
+        # 计算超过绝对阈值的异常点数量
+        threshold_exceeded_count = sum(1 for a in potential_anomalies if a["exceeds_threshold"])
+        threshold_exceeded_ratio = threshold_exceeded_count / len(ratio_data) if ratio_data else 0
+        
+        # 根据多个指标综合判断风险级别
+        if ((max_z_score > 3.0 and max_deviation_pct > 15.0) or 
+            max_deviation_pct > 25.0 or 
+            (threshold_exceeded_count >= 3 and threshold_exceeded_ratio > 0.05)):
             warning_level = "high"
-        elif (max_z_score > 2.5 and max_deviation_pct > 10.0) or max_deviation_pct > 15.0 or max_z_score > 3.0:
+        elif ((max_z_score > 2.5 and max_deviation_pct > 10.0) or 
+              max_deviation_pct > 15.0 or 
+              max_z_score > 3.0 or
+              (threshold_exceeded_count >= 2)):
             warning_level = "medium"
     
-    # 返回结果
+    # 计算上下界 - 使用用户设置的阈值倍数计算
+    upper_bound = mean_ratio + threshold_multiplier * std
+    lower_bound = mean_ratio - threshold_multiplier * std
+    
+    # 返回结果，包括计算出的上下界
     return {
         "mean": mean_ratio,
         "std": std,
         "anomalies": anomalies,
         "warning_level": warning_level,
-        "upper_bound": mean_ratio + 2.0 * std,
-        "lower_bound": mean_ratio - 2.0 * std
+        "upper_bound": upper_bound,
+        "lower_bound": lower_bound
     }

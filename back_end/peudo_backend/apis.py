@@ -48,17 +48,17 @@ async def search_stocks(keyword: str):
         with open('stock_list.json', 'r', encoding='utf-8') as file:
             stock_info_json = json.load(file)
             stock_info_list = stock_info_json['stocks']
-        
+
         # 如果关键词为空，返回空结果
         if not keyword.strip():
             return {"result": []}
-        
+
         # 搜索匹配的股票并进行评分
         matched_stocks = search_stocks_with_score(stock_info_list, keyword)
-        
+
         # 提取排序后的股票信息
         searched = [item[0] for item in matched_stocks]
-        
+
         return {"result": searched}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"搜索股票时发生错误: {str(e)}")
@@ -79,10 +79,10 @@ def search_stocks_with_score(stock_list: List[Dict[str, str]], keyword: str) -> 
         score = score_match(stock_info, keyword)
         if score > 0:
             searched_with_score.append((stock_info, score))
-    
+
     # 根据得分排序，得分高的在前
     searched_with_score.sort(key=lambda x: x[1], reverse=True)
-    
+
     return searched_with_score
 
 
@@ -91,7 +91,7 @@ class DataModel(BaseModel):
     code_b: str
     degree: int
     duration: str
-    threshold_arg: float = 2.0  # 添加阈值参数，默认为2.0
+    threshold_arg: float
 
 
 """
@@ -110,29 +110,27 @@ async def get_k_chart_info(user_option_info: DataModel):
     try:
         # 调用k_chart_fetcher函数获取K线数据
         chart_data = k_chart_fetcher(
-            user_option_info.code_a, 
-            user_option_info.code_b, 
-            user_option_info.duration, 
-            user_option_info.degree, 
+            user_option_info.code_a,
+            user_option_info.code_b,
+            user_option_info.duration,
+            user_option_info.degree,
             threshold_arg=user_option_info.threshold_arg
         )
-        
-        # 获取前端传入的阈值系数
-        threshold_multiplier = user_option_info.threshold_arg
-        
-        # 根据前端的阈值系数调整标准差
-        adjusted_std = chart_data["threshold"]
-        
-        # 计算价差异常值，将调整后的标准差传递给异常检测函数
+
+        # 获取前端传入的阈值系数和原始标准差
+        threshold_multiplier = user_option_info.threshold_arg  # 用户设置的阈值倍数（如2.0）
+        original_std = chart_data["threshold"]  # 原始标准差
+
         anomaly_info = calculate_price_ratio_anomaly(
             chart_data["ratio"],
             chart_data["delta"],
-            adjusted_std
+            threshold_multiplier,  # 用户设置的阈值倍数
+            original_std  # 原始标准差
         )
-        
+
         # 合并结果并返回
         chart_data["anomaly_info"] = anomaly_info
-        
+
         return chart_data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -191,32 +189,32 @@ async def search_top_assets(keyword: str):
     with open('stock_list.json', 'r', encoding='utf-8') as file:
         stock_info_json = json.load(file)
         stock_info_list = stock_info_json['stocks']
-    
+
     # 搜索匹配的股票
     searched_with_score = []
     for stock_info in stock_info_list:
         score = score_match(stock_info, keyword)
         if score > 0:
             searched_with_score.append((stock_info, score))
-    
+
     # 如果没有匹配结果，且关键词为纯数字或可能是股票代码格式，尝试爬取
     is_stock_code = is_stock_code_format(keyword)
     new_stock_info = None
-    
+
     if not searched_with_score and is_stock_code:
         print(f"未找到股票，尝试从API获取: {keyword}")
         new_stock_info = await fetch_stock_from_api(keyword)
-        
+
         if new_stock_info:
             # 添加到搜索结果中
             searched_with_score.append((new_stock_info, 100))  # 给新爬取的股票最高分
-    
+
     # 根据得分排序，得分高的在前
     searched_with_score.sort(key=lambda x: x[1], reverse=True)
-    
+
     # 提取排序后的股票信息
     searched = [item[0] for item in searched_with_score]
-    
+
     # 限制返回top-30结果
     return {"assets": searched[:30]}
 
@@ -281,38 +279,38 @@ async def get_stock_kline(data: StockKlineRequest):
                 if stock['code'] == data.code:
                     stock_info = stock
                     break
-        
+
         # 如果股票不存在，尝试从API获取
         if not stock_info:
             stock_info = await fetch_stock_from_api(data.code)
             if not stock_info:
                 raise HTTPException(status_code=404, detail=f"股票代码 {data.code} 未找到")
-        
+
         # 从数据库获取K线数据
         db = StockKlineDatabase()
-        
+
         # 计算起始日期和结束日期
         end_date = datetime.now().strftime('%Y-%m-%d')
-        
+
         # 根据duration计算起始日期
         if data.duration == 'maximum':
             start_date = '2015-01-01'  # 数据库中最早的数据
         else:
             days = durations[data.duration]
             start_date = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
-        
+
         # 查询原始K线数据
         records = db.query_kline(data.code, start_date, end_date)
-        
+
         if not records:
             raise HTTPException(status_code=404, detail=f"股票 {data.code} 在指定时间范围内没有数据")
-        
+
         # 处理K线类型 (日K, 周K, 月K, 年K)
         kline_data = process_kline_by_type(records, data.kline_type)
-        
+
         # 计算技术指标
         indicators = calculate_indicators(kline_data)
-        
+
         # 构建响应
         return {
             "code": stock_info["code"],
@@ -321,7 +319,7 @@ async def get_stock_kline(data: StockKlineRequest):
             "kline_data": kline_data,
             "indicators": indicators
         }
-    
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

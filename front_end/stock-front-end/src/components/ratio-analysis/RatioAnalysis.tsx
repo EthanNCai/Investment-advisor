@@ -502,26 +502,91 @@ const RatioAnalysis: React.FC = () => {
     };
   };
 
+  // 添加股票选择前的验证函数
+  const validateStockSelection = async (code: string): Promise<boolean> => {
+    // 先检查是否在现有列表中
+    const stockExists = stockList.some(stock => stock.code === code);
+    
+    if (stockExists) {
+      return true; // 股票存在，无需爬取
+    }
+    
+    // 显示加载提示
+    message.loading({ content: `正在获取 ${code} 的股票数据...`, key: code });
+    
+    try {
+      // 尝试从API获取股票信息
+      console.log(`尝试获取不存在的股票: ${code}`);
+      const response = await fetch(`http://localhost:8000/search_top_assets/${code}`);
+      
+      if (!response.ok) {
+        message.error({ content: `股票 ${code} 获取失败`, key: code });
+        return false;
+      }
+      
+      const data = await response.json();
+      
+      // 检查是否成功获取到股票
+      if (data.assets && data.assets.length > 0) {
+        // 找到与代码匹配的股票
+        const matchedStock = data.assets.find((stock: any) => stock.code === code);
+        
+        if (matchedStock) {
+          // 添加到本地列表
+          setStockList(prevList => {
+            // 避免重复添加
+            if (prevList.some(s => s.code === matchedStock.code)) {
+              return prevList;
+            }
+            return [...prevList, matchedStock];
+          });
+          
+          message.success({ content: `已获取 ${matchedStock.name} (${code}) 的数据`, key: code });
+          return true;
+        }
+      }
+      
+      message.error({ content: `未找到股票 ${code}`, key: code });
+      return false;
+    } catch (error) {
+      console.error("获取股票数据失败:", error);
+      message.error({ content: `股票 ${code} 数据获取异常`, key: code });
+      return false;
+    }
+  };
+
   // 股票A选择处理函数
-  const handleStockAChange = (value: string) => {
+  const handleStockAChange = async (value: string) => {
     // 检查是否与股票B相同
     if (value === selectedStockB) {
       message.error('股票A和股票B不能选择相同的股票');
       return;
     }
-    setSelectedStockA(value);
-    // 依靠useEffect处理更新
+    
+    // 验证股票是否存在，不存在则尝试爬取
+    const isValid = await validateStockSelection(value);
+    
+    if (isValid) {
+      setSelectedStockA(value);
+      // 依靠useEffect处理更新
+    }
   };
 
   // 股票B选择处理函数
-  const handleStockBChange = (value: string) => {
+  const handleStockBChange = async (value: string) => {
     // 检查是否与股票A相同
     if (value === selectedStockA) {
       message.error('股票A和股票B不能选择相同的股票');
       return;
     }
-    setSelectedStockB(value);
-    // 依靠useEffect处理更新
+    
+    // 验证股票是否存在，不存在则尝试爬取
+    const isValid = await validateStockSelection(value);
+    
+    if (isValid) {
+      setSelectedStockB(value);
+      // 依靠useEffect处理更新
+    }
   };
 
   // 时间跨度选择处理函数
