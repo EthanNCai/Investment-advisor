@@ -10,6 +10,7 @@ import MenuItem from '@mui/material/MenuItem';
 import Menu from '@mui/material/Menu';
 import Button from '@mui/material/Button';
 import { Link as RouterLink } from 'react-router-dom';
+import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 
 export default function MenuAppBar() {
     const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
@@ -54,6 +55,15 @@ export default function MenuAppBar() {
                         sx={{ mx: 1 }}
                     >
                         资产选择
+                    </Button>
+                    <Button 
+                        color="inherit" 
+                        component={RouterLink} 
+                        to="/ratio-analysis"
+                        sx={{ mx: 1 }}
+                        startIcon={<TrendingUpIcon />}
+                    >
+                        比值分析
                     </Button>
 
                     <div>

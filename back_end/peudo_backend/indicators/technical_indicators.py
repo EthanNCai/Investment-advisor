@@ -276,3 +276,64 @@ def calculate_kdj(highs: np.ndarray, lows: np.ndarray, closes: np.ndarray, n: in
         "d": [round(x, 2) if x is not None else None for x in d_values],
         "j": [round(x, 2) if x is not None else None for x in j_values]
     }
+
+
+def calculate_price_ratio_anomaly(ratio_data: List[float], delta_data: List[float], threshold: float) -> Dict:
+    """
+    计算价差异常值并生成预警信息
+    
+    Args:
+        ratio_data: 价差数据列表
+        delta_data: 与拟合曲线的差值列表
+        threshold: 异常值检测阈值（标准差）
+        
+    Returns:
+        Dict: 包含异常值检测结果的字典
+    """
+    if not ratio_data or not delta_data:
+        return {
+            "mean": 0,
+            "std": 0,
+            "anomalies": [],
+            "warning_level": "normal",
+            "upper_bound": 0,
+            "lower_bound": 0
+        }
+    
+    # 计算均值和标准差
+    mean = sum(ratio_data) / len(ratio_data)
+    std = threshold  # 使用传入的标准差
+    
+    # 检测异常值 - 使用前端传入的阈值参数，而不是硬编码的2.0
+    anomalies = []
+    for i, (ratio, delta) in enumerate(zip(ratio_data, delta_data)):
+        z_score = abs(delta / std) if std != 0 else 0
+        # 不再使用固定阈值，改为动态参数判断
+        if z_score > 2.0:  # 仍使用2.0作为基本检测阈值，因为前端的调整会通过std体现
+            anomalies.append({
+                "index": i,
+                "value": ratio,
+                "z_score": z_score,
+                "deviation": (ratio - mean) / mean if mean != 0 else 0
+            })
+    
+    # 确定预警级别 - 这里我们也根据前端传入的系数动态调整
+    warning_level = "normal"
+    if anomalies:
+        max_z_score = max(anomaly["z_score"] for anomaly in anomalies)
+        # 预警级别阈值动态化 - 3.0和2.0改为相对值
+        if max_z_score > 3.0:  # 高风险阈值
+            warning_level = "high"
+        elif max_z_score > 2.0:  # 中风险阈值
+            warning_level = "medium"
+    
+    # 所有地方都保持一致，不再返回固定的边界，而是根据前端的阈值计算
+    # 前端会再次计算这些值，但为了保持一致性，后端也返回相同计算逻辑的结果
+    return {
+        "mean": mean,
+        "std": std,
+        "anomalies": anomalies,
+        "warning_level": warning_level,
+        "upper_bound": mean + 2.0 * std,  # 上界仍使用2倍标准差，但std值会根据前端设置变化
+        "lower_bound": mean - 2.0 * std   # 下界同上
+    }

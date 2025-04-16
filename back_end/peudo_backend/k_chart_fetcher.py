@@ -107,17 +107,21 @@ def get_stock_data_pair(code_a: str, code_b: str) -> tuple:
     return close_a, close_b, dates_a, dates_b
 
 
-def k_chart_fetcher(code_a, code_b, duration_in, degree, threshold_arg):
+def k_chart_fetcher(code_a, code_b, duration_in, degree, threshold_arg=2.0):
+    """
+    获取K线图数据，计算两只股票的价格比值和异常检测
+    
+    Args:
+        code_a: 股票A代码
+        code_b: 股票B代码
+        duration_in: 时间跨度
+        degree: 多项式拟合的次数
+        threshold_arg: 异常检测阈值系数，默认为2.0
+        
+    Returns:
+        Dict: 包含K线图数据的字典
+    """
     # 第一步：拿到需要的两个股票的收盘价list
-
-    # with open('../peudo_backend/stock_info_base.json', 'r', encoding='utf-8') as file:
-    #     stock_info_base = json.load(file)
-
-    # 从数据库里面读取 两只股票的dates和close (日期&收盘价)
-    # close_a_: list = stock_info_base[code_a]['close']
-    # close_b_: list = stock_info_base[code_b]['close']
-    # dates_a_: list = stock_info_base[code_a]['dates']
-    # dates_b_: list = stock_info_base[code_b]['dates']
     close_a_, close_b_, dates_a_, dates_b_ = get_stock_data_pair(code_a, code_b)
 
     # 需要注意的是，两个股票不一定交易日是重叠的，所以我们只取二者交易日的交集最终计算ratio，我将其称之为日期的alignment
@@ -132,7 +136,6 @@ def k_chart_fetcher(code_a, code_b, duration_in, degree, threshold_arg):
     close_a = close_a[-duration_days:]
     close_b = close_b[-duration_days:]
     dates = dates[-duration_days:]
-    # print(dates)
 
     ratio = [float(a) / float(b) for a, b in zip(close_a, close_b)]
 
@@ -145,17 +148,20 @@ def k_chart_fetcher(code_a, code_b, duration_in, degree, threshold_arg):
     fitting_line = poly(x).tolist()
     delta = [r - f for r, f in zip(ratio, fitting_line)]
 
-    # 第三步：计算离群点
+    # 第三步：计算标准差
     yd = np.array(delta)
     std_dev = np.std(yd)
+    # 将前端传入的阈值系数应用于标准差
+    # 这里我们不直接修改std_dev，而是将它作为基准值返回
+    # 让前端和其他函数根据需要使用这个基准值和阈值系数进行计算
     threshold = std_dev
 
-    # 找到离群点的index
-
-    return {"close_a": close_a,
-            "close_b": close_b,
-            "dates": dates,
-            "ratio": ratio,
-            "fitting_line": fitting_line,
-            "delta": delta,
-            "threshold": threshold}
+    return {
+        "close_a": close_a,
+        "close_b": close_b,
+        "dates": dates,
+        "ratio": ratio,
+        "fitting_line": fitting_line,
+        "delta": delta,
+        "threshold": threshold  # 原始标准差
+    }

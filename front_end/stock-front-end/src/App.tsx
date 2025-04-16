@@ -1,8 +1,9 @@
-import MenuAppBar from "./components/MenuAppBar.tsx";
+import MenuAppBar from "./components/layout/MenuAppBar.tsx";
 import {Container, CssBaseline} from "@mui/material";
-import MainLayout from "./components/MainLayout.tsx";
+import MainLayout from "./components/layout/MainLayout.tsx";
 import { Routes, Route } from "react-router-dom";
 import AssetSelection from "./components/AssetSelection/AssetSelection.tsx";
+import RatioAnalysis from "./components/ratio-analysis/RatioAnalysis.tsx";
 
 function App() {
   return (
@@ -25,6 +26,7 @@ function App() {
               <Routes>
                   <Route path="/" element={<MainLayout />} />
                   <Route path="/assets" element={<AssetSelection />} />
+                  <Route path="/ratio-analysis" element={<RatioAnalysis />} />
               </Routes>
           </Container>
           </>

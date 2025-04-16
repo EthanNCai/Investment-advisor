@@ -23,7 +23,7 @@ export interface StockContextInterface {
 export interface UserOptionInfo{
   duration:string;
   degree:number;
-  // threshold_arg:number;
+  threshold_arg:number;
   code_a:string;
   code_b:string;
 }
@@ -44,6 +44,19 @@ export interface KChartInfo {
   fitting_line:number[];
   delta:number[];
   threshold:number;
+  anomaly_info?: {
+    mean: number;
+    std: number;
+    anomalies: Array<{
+      index: number;
+      value: number;
+      z_score: number;
+      deviation: number;
+    }>;
+    warning_level: 'normal' | 'medium' | 'high';
+    upper_bound: number;
+    lower_bound: number;
+  };
 }
 
 export const StockContext = createContext<StockContextInterface | undefined>(

@@ -178,19 +178,20 @@ class StockKlineDatabase:
 
 
 if __name__ == '__main__':
-    splider = EastMoneyKLineSpider("00700")
-    data = splider.get_klines()
-    data_list = splider.format_klines(data['klines'])
-    db = StockKlineDatabase()
-    db.insert_kline_data(data_list, data['code'], data['name'], data['type'])
-    result = db.query_kline(
-        stock_code='00700',
-        start_date='2023-07-10',
-        end_date='2025-04-13'
-    )
-    print(result)
-    # db.cleanup_old_data()
-    db.close()
+    pass
+    # splider = EastMoneyKLineSpider("00700")
+    # data = splider.get_klines()
+    # data_list = splider.format_klines(data['klines'])
+    # db = StockKlineDatabase()
+    # db.insert_kline_data(data_list, data['code'], data['name'], data['type'])
+    # result = db.query_kline(
+    #     stock_code='00700',
+    #     start_date='2023-07-10',
+    #     end_date='2025-04-13'
+    # )
+    # print(result)
+    # # db.cleanup_old_data()
+    # db.close()
 
 
 

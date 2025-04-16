@@ -1,24 +1,23 @@
 import { Box } from "@mui/system";
 
-import SearchBar from "./Search.tsx";
+import SearchBar from "../common/Search.tsx";
 import  { useEffect, useState } from "react";
-import {StockContext, KChartInfo, UserOptionInfo, StockInfo} from "./interfaces.tsx";
+import { StockContext, KChartInfo, UserOptionInfo, StockInfo } from "../common/interfaces.tsx";
 
-import { KChart } from "./KChart.tsx";
-import {Paper} from "@mui/material";
+import { KChart } from "../charts/KChart.tsx";
+import { Paper } from "@mui/material";
+
 const MainLayout = () => {
-
   const [degree, setDegree] = useState(2);
   const [duration, setDuration] = useState('1y');
   const [threshold_arg, setThreshold_arg] = useState(1.5);
   const [kChartInfo, setKChartInfo] = useState<KChartInfo | undefined>(
     undefined
   );
-    const [stockInfoA, setStockInfoA] = useState<StockInfo>({name:"",code:"",type:""});
-    const [stockInfoB, setStockInfoB] = useState<StockInfo>({name:"",code:"",type:""});
-    const [showRatio, setShowRatio] = useState(true);
-    const [showDelta, setShowDelta] = useState(true);
-
+  const [stockInfoA, setStockInfoA] = useState<StockInfo>({name:"",code:"",type:""});
+  const [stockInfoB, setStockInfoB] = useState<StockInfo>({name:"",code:"",type:""});
+  const [showRatio, setShowRatio] = useState(true);
+  const [showDelta, setShowDelta] = useState(true);
 
   useEffect(() => {
     const fetchKChartInfo = () => {
@@ -29,7 +28,7 @@ const MainLayout = () => {
           code_a:stockInfoA.code,
           code_b:stockInfoB.code,
           duration:duration,
-          // threshold_arg:threshold,
+          threshold_arg:threshold_arg,
           degree:degree
       }
       return fetch(`http://localhost:8000/get_k_chart_info/`,{
@@ -56,7 +55,7 @@ const MainLayout = () => {
     };
     fetchKChartInfo();
 
-  }, [stockInfoA, stockInfoB, duration,degree]);
+  }, [stockInfoA, stockInfoB, duration, degree, threshold_arg]);
 
   return (
 

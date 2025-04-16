@@ -1,23 +1,18 @@
 import json
-import re
-import math
+from datetime import datetime, timedelta
 # import torch
-import numpy as np
-import pandas as pd
-from typing import List, Dict, Any, Optional, Union, Tuple
-from fastapi import FastAPI, HTTPException, Query, Body
+from typing import List, Dict
+
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from pypinyin import lazy_pinyin, Style
-from k_chart_fetcher import k_chart_fetcher, durations
-from get_stock_data.stock_data_base import StockKlineDatabase
-from get_stock_data.get_stock_data_A_and_G import EastMoneyKLineSpider
-from datetime import datetime, timedelta
 
+from get_stock_data.stock_data_base import StockKlineDatabase
+from indicators.technical_indicators import calculate_indicators, calculate_price_ratio_anomaly
+from k_chart_fetcher import k_chart_fetcher, durations
+from kline_processor.processor import process_kline_by_type
 # 导入模块化后的函数
-from stock_search.searcher import score_match, is_stock_code_format, fetch_stock_from_api, search_stocks
-from kline_processor.processor import process_kline_by_type, aggregate_klines
-from indicators.technical_indicators import calculate_indicators, calculate_ma, calculate_macd, calculate_ema, calculate_rsi
+from stock_search.searcher import score_match, is_stock_code_format, fetch_stock_from_api
 
 app = FastAPI()
 
@@ -96,6 +91,7 @@ class DataModel(BaseModel):
     code_b: str
     degree: int
     duration: str
+    threshold_arg: float = 2.0  # 添加阈值参数，默认为2.0
 
 
 """
@@ -110,9 +106,36 @@ class DataModel(BaseModel):
 
 
 @app.post("/get_k_chart_info/")
-async def receive_data(data: DataModel):
-    ret = k_chart_fetcher(data.code_a, data.code_b, data.duration, data.degree, None)
-    return ret
+async def get_k_chart_info(user_option_info: DataModel):
+    try:
+        # 调用k_chart_fetcher函数获取K线数据
+        chart_data = k_chart_fetcher(
+            user_option_info.code_a, 
+            user_option_info.code_b, 
+            user_option_info.duration, 
+            user_option_info.degree, 
+            threshold_arg=user_option_info.threshold_arg
+        )
+        
+        # 获取前端传入的阈值系数
+        threshold_multiplier = user_option_info.threshold_arg
+        
+        # 根据前端的阈值系数调整标准差
+        adjusted_std = chart_data["threshold"]
+        
+        # 计算价差异常值，将调整后的标准差传递给异常检测函数
+        anomaly_info = calculate_price_ratio_anomaly(
+            chart_data["ratio"],
+            chart_data["delta"],
+            adjusted_std
+        )
+        
+        # 合并结果并返回
+        chart_data["anomaly_info"] = anomaly_info
+        
+        return chart_data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # 获取所有资产

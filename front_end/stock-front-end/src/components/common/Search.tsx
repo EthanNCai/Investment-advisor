@@ -4,16 +4,16 @@ import Typography from "@mui/material/Typography";
 import TextField from "@mui/material/TextField";
 import { Box } from "@mui/system";
 import { useContext } from "react";
-import {StockContext, StockInfo} from "./interfaces.tsx";
-import {SliderSelector} from "./SliderSelector.tsx";
-import {StockDivision} from "./StockDivision.tsx";
+import { StockContext, StockInfo } from "./interfaces.tsx";
+import { SliderSelector } from "../selectors/SliderSelector.tsx";
+import { StockDivision } from "./StockDivision.tsx";
 
 export default function SearchBar() {
   const {
     stockInfoA,
     setStockInfoA,
     stockInfoB,
-    setStockInfoB ,
+    setStockInfoB,
     degree,
     setDegree,
     threshold_arg,
@@ -22,6 +22,16 @@ export default function SearchBar() {
   const [search_keyword, setSearch_keyword] = useState("");
   const [stockInfos, setStockInfos] = useState<StockInfo[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  
+  // 临时状态用于SliderSelector内部处理
+  const [tempDegree, setTempDegree] = useState<number>(degree);
+  const [tempThreshold, setTempThreshold] = useState<number>(threshold_arg);
+  
+  // 当上下文中的值变化时，更新临时状态
+  useEffect(() => {
+    setTempDegree(degree);
+    setTempThreshold(threshold_arg);
+  }, [degree, threshold_arg]);
 
   // 使用防抖函数优化搜索，避免频繁请求
   useEffect(() => {
@@ -50,6 +60,18 @@ export default function SearchBar() {
       setIsSearching(false);
     }
   };
+  
+  // 处理拟合曲线阶数变化
+  const handleDegreeChange = (value: number) => {
+    setTempDegree(value);
+    setDegree(value);
+  };
+  
+  // 处理异常值门限变化
+  const handleThresholdChange = (value: number) => {
+    setTempThreshold(value);
+    setThreshold_arg(value);
+  };
 
   return (
     <Container>
@@ -57,8 +79,8 @@ export default function SearchBar() {
         <StockDivision stockA={stockInfoA} stockB={stockInfoB}/>
         <SliderSelector
             title={"拟合曲线阶"}
-            current_value={degree}
-            set_current_value={setDegree}
+            value={tempDegree}
+            onChange={handleDegreeChange}
             max={8}
             min={1}
             step={1}
@@ -66,8 +88,8 @@ export default function SearchBar() {
 
         <SliderSelector
             title={"异常值门限"}
-            current_value={threshold_arg}
-            set_current_value={setThreshold_arg}
+            value={tempThreshold}
+            onChange={handleThresholdChange}
             max={3}
             min={1}
             step={0.05}
