@@ -40,7 +40,7 @@ class StockTrendsData:
             'ut': 'fa5fd1943c7b386f172d6893dbfba10b'
         }
 
-        # 字段参数区分市场
+        # 字段参数区分市场(港股或美股）
         if self.market_type == '116' or self.market_type == '105':
             params = {
                 'fields1': 'f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13',

@@ -6,7 +6,7 @@ from typing import Dict, List, Union
 
 import requests
 
-MARKET_TYPE_MAPPING = {'116': '港股', '105': '美股'}
+MARKET_TYPE_MAPPING = {'116': '港股', '105': '美股', '113': '上海黄金期货', '118': '上海黄金现货'}
 
 
 # 获取K线数据
@@ -23,21 +23,41 @@ class EastMoneyKLineSpider:
 
     def _determine_market(self) -> str:
         code = self.stock_code.upper()
-        if code.replace(".", "").isalpha() and 1 <= len(code) <= 5:
+
+        # 黄金期货判断 (113)
+        if (code.startswith('AU') and 5 <= len(code) <= 6 and any(c.isdigit() for c in code)) or \
+                (code in ['AUM', 'AUS']):
+            return '113'  # 上海黄金期货
+
+        # 黄金现货判断 (118)
+        elif code.startswith('NYAU') or \
+                code in ['AUTD', 'MAUTD', 'AU100', 'AU9995', 'AU9999', 'SHAU', 'IAU999', 'PT9995',
+                         'AGTD', 'IAU995', 'IAU100', 'PGC30', 'AUTN1', 'AUTN2', 'AU995', 'AU50',
+                         'AG9999', 'AG999'] or \
+                (code.startswith('AU') and ('TD' in code or 'TN' in code)):
+            return '118'  # 上海黄金现货
+
+        # 美股判断
+        elif code.replace(".", "").isalpha() and 1 <= len(code) <= 5:
             return '105'  # 美股
+
+        # A股判断
         elif code.startswith('6'):
             return '1'  # 沪市
         elif code.startswith(('0', '3', '9', '8')) and len(code) == 6:
             return '0'  # 深市/北交所
+
+        # 港股判断
         elif code.startswith(('1', '0')) and len(code) == 5:
             return '116'  # 港股
+
         else:
             raise ValueError(f"无法识别的股票代码: {self.stock_code}")
 
     def _generate_callback(self) -> str:
         """生成动态回调函数名"""
-        if self.market_type == '116' or self.market_type == '105':
-            # 港股格式：jQuery + 16位随机数字 + _时间戳
+        if self.market_type in ['116', '105']:
+            # 港股/美股格式：jQuery + 16位随机数字 + _时间戳
             rand_str = ''.join(str(random.randint(0, 9)) for _ in range(16))
             timestamp = int(time.time() * 1000)
             return f"jQuery{rand_str}_{timestamp}"
@@ -49,14 +69,24 @@ class EastMoneyKLineSpider:
         base_params = {
             'secid': f"{self.market_type}.{self.stock_code}",
             'beg': '0',
-            'end': '20500101',
+            'end': '20500000',
             'klt': '101',
             'fqt': '1',
             'ut': 'fa5fd1943c7b386f172d6893dbfba10b',
         }
 
-        # 字段参数区分市场
-        if self.market_type == '116' or self.market_type == '105':
+        # 黄金参数
+        if self.market_type in ['113', '118']:
+            params = {
+                'fields1': 'f1,f2,f3,f4,f5,f6,f7,f8',
+                'fields2': 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64',
+                'lmt': '100000',  # 修改为100000，获取更多历史数据
+                'iscca': '1',
+                'ut': 'f057cbcbce2a86e2866ab8877db1d059',
+                'forcect': '1'
+            }
+        # 港股美股参数
+        elif self.market_type in ['116', '105']:
             params = {
                 'fields1': 'f1,f2,f3,f4,f5,f6',
                 'fields2': 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61',
@@ -65,6 +95,7 @@ class EastMoneyKLineSpider:
                 '_': str(int(time.time() * 1000)),
                 'cb': self._generate_callback()
             }
+        # A股参数
         else:
             params = {
                 'fields1': 'f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13',
@@ -121,6 +152,11 @@ class EastMoneyKLineSpider:
         for k in raw_klines:
             try:
                 parts = k.split(',')
+                # 格式化数据，保留四位小数
+                amplitude = float(parts[7].rstrip('%')) / 100 if parts[7] else 0.0
+                change_pct = float(parts[8].rstrip('%')) / 100 if parts[8] else 0.0
+                turnover = float(parts[10].rstrip('%')) / 100 if len(parts) > 10 and parts[10] else 0.0
+
                 formatted.append({
                     'stock_code': self.stock_code,
                     "date": parts[0],
@@ -128,22 +164,25 @@ class EastMoneyKLineSpider:
                     "close": float(parts[2]),
                     "high": float(parts[3]),
                     "low": float(parts[4]),
-                    "volume": int(parts[5]),
-                    "amount": float(parts[6]),
-                    # 振幅
-                    "amplitude": float(parts[7].rstrip('%')) / 100,
-                    # 涨跌幅
-                    "change_pct": float(parts[8].rstrip('%')) / 100,
+                    "volume": int(float(parts[5])) if parts[5] else 0,
+                    "amount": float(parts[6]) if parts[6] else 0.0,
+                    # 振幅 - 保留四位小数
+                    "amplitude": round(amplitude, 4),
+                    # 涨跌幅 - 保留四位小数
+                    "change_pct": round(change_pct, 4),
                     # 涨跌额
-                    "change_amt": float(parts[9]),
-                    # 换手率
-                    "turnover": float(parts[10].rstrip('%')) / 100
+                    "change_amt": float(parts[9]) if parts[9] else 0.0,
+                    # 换手率 - 保留四位小数
+                    "turnover": round(turnover, 4)
                 })
             except (IndexError, ValueError) as e:
-                print(f"数据解析异常，跳过该条记录: {k}")
+                print(f"数据解析异常，跳过该条记录: {k}, 错误: {e}")
         return formatted
 
     def get_market_name(self):
+        # 将上海黄金期货和上海黄金现货统一归类为"黄金"类型
+        if self.market_type in ['113', '118']:
+            return '黄金'
         return MARKET_TYPE_MAPPING.get(self.market_type, 'A股')
 
 
@@ -163,3 +202,5 @@ if __name__ == "__main__":
     # print(hk_data['klines'][-3:-1])
     # print(hk_spider.format_klines(hk_data['klines'])[-3:-1])
     # print(len(hk_data['klines']))
+
+

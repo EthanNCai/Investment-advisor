@@ -48,6 +48,7 @@ interface ChartData {
   delta: number[];
   threshold: number;
   anomaly_info: AnomalyInfo;
+  _timestamp?: number; // 添加可选的时间戳字段用于强制刷新图表
 }
 
 interface StockInfo {
@@ -188,6 +189,7 @@ const RatioAnalysis: React.FC = () => {
 
   // 当阈值变化时更新边界
   const handleThresholdChange = (value: number) => {
+    console.log("阈值变更为:", value);
     setAnomalyThreshold(value);
     
     // 如果图表数据已加载，则更新异常检测边界
@@ -195,8 +197,8 @@ const RatioAnalysis: React.FC = () => {
       // 使用统一的方法更新上下界值
       const updatedChartData = updateBoundsInData(chartData, value);
       
-      // 更新状态
-      setChartData(updatedChartData);
+      // 确保更新时会强制刷新图表
+      setChartData({...updatedChartData, _timestamp: Date.now()});
       
       // 当用户手动调整阈值后，也发送请求获取新的异常检测结果
       if (selectedStockA && selectedStockB) {
@@ -375,6 +377,21 @@ const RatioAnalysis: React.FC = () => {
   const getDeltaChartOption = () => {
     if (!chartData) return {};
     
+    // 明确计算阈值，确保所有类型股票显示一致
+    const threshold = chartData.threshold; // 后端返回的标准差
+    const actualThreshold = threshold * anomalyThreshold; // 用户调整的阈值乘以标准差
+    
+    console.log("差值图表阈值计算:", { 
+      标准差: threshold, 
+      用户阈值: anomalyThreshold, 
+      实际阈值线值: actualThreshold 
+    });
+
+    // 确保Y轴有足够空间显示阈值线，不会与0轴重叠
+    const maxDelta = Math.max(...chartData.delta.map(d => Math.abs(d)));
+    const yAxisMax = Math.max(actualThreshold * 1.5, maxDelta * 1.2);
+    const yAxisMin = -yAxisMax; // 保持对称
+    
     return {
       title: {
         text: '比值与拟合线差值',
@@ -386,17 +403,19 @@ const RatioAnalysis: React.FC = () => {
           const dateIndex = params[0].dataIndex;
           const date = chartData.dates[dateIndex];
           const delta = params[0].value;
-          const threshold = chartData.threshold * anomalyThreshold;
           
           let html = `<div><strong>${date}</strong></div>`;
           html += `<div>差值: ${delta.toFixed(4)}</div>`;
-          html += `<div>阈值: ±${threshold.toFixed(4)}</div>`;
+          html += `<div>阈值: ±${actualThreshold.toFixed(4)}</div>`;
+          html += `<div>标准差: ${threshold.toFixed(4)}</div>`;
+          html += `<div>阈值倍数: ${anomalyThreshold.toFixed(1)}</div>`;
           
           // 检查是否为异常点
           const anomaly = chartData.anomaly_info.anomalies.find(a => a.index === dateIndex);
           if (anomaly) {
             html += `<div style="color: #ff4d4f;"><strong>异常点!</strong></div>`;
             html += `<div>Z分数: ${anomaly.z_score.toFixed(2)}</div>`;
+            html += `<div>偏离度: ${(anomaly.deviation * 100).toFixed(2)}%</div>`;
           }
           
           return html;
@@ -421,7 +440,15 @@ const RatioAnalysis: React.FC = () => {
       },
       yAxis: {
         type: 'value',
-        scale: true
+        scale: false, // 不自动缩放，使用固定范围
+        min: yAxisMin,
+        max: yAxisMax,
+        axisLabel: {
+          formatter: (value: number) => {
+            // 格式化Y轴标签，最多显示4位小数
+            return value.toFixed(4);
+          }
+        }
       },
       dataZoom: [
         {
@@ -456,13 +483,13 @@ const RatioAnalysis: React.FC = () => {
               y2: 1,
               colorStops: [{
                 offset: 0,
-                color: 'rgba(255, 77, 79, 0.3)' // 上半部分颜色
+                color: 'rgba(255, 0, 0, 0.4)' // 上半部分颜色，更鲜明的红色
               }, {
                 offset: 0.5,
-                color: 'rgba(255, 255, 255, 0.1)'
+                color: 'rgba(255, 255, 255, 0.2)'
               }, {
                 offset: 1,
-                color: 'rgba(24, 144, 255, 0.3)' // 下半部分颜色
+                color: 'rgba(0, 112, 255, 0.4)' // 下半部分颜色，更鲜明的蓝色
               }]
             }
           },
@@ -478,36 +505,70 @@ const RatioAnalysis: React.FC = () => {
                 }
               },
               {
-                yAxis: chartData.threshold * anomalyThreshold,
+                yAxis: actualThreshold,
                 lineStyle: {
-                  color: '#ff4d4f',
-                  type: 'dashed'
+                  color: '#ff0000',
+                  type: 'dashed',
+                  width: 2.5
+                },
+                label: {
+                  formatter: `上限阈值: ${actualThreshold.toFixed(4)}`,
+                  position: 'end',
+                  distance: [0, -10],
+                  color: '#ff0000',
+                  fontWeight: 'bold',
+                  backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                  padding: [2, 4]
                 }
               },
               {
-                yAxis: -chartData.threshold * anomalyThreshold,
+                yAxis: -actualThreshold,
                 lineStyle: {
-                  color: '#ff4d4f',
-                  type: 'dashed'
+                  color: '#ff0000',
+                  type: 'dashed',
+                  width: 2.5
+                },
+                label: {
+                  formatter: `下限阈值: ${actualThreshold.toFixed(4)}`,
+                  position: 'end',
+                  distance: [0, 10],
+                  color: '#ff0000',
+                  fontWeight: 'bold',
+                  backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                  padding: [2, 4]
                 }
               }
             ]
           },
           markPoint: {
-            data: chartData.anomaly_info.anomalies.map(anomaly => ({
-              name: '异常点',
-              value: chartData.delta[anomaly.index],
-              xAxis: anomaly.index,
-              yAxis: chartData.delta[anomaly.index],
-              itemStyle: {
-                color: anomaly.z_score > 3 ? '#ff4d4f' : anomaly.z_score > 2.5 ? '#faad14' : '#1890ff'
-              },
-              symbol: 'circle',
-              symbolSize: anomaly.z_score > 3 ? 10 : anomaly.z_score > 2.5 ? 8 : 6,
-              label: {
-                show: false  // 不显示标签文字
-              }
-            }))
+            data: chartData.anomaly_info.anomalies.map(anomaly => {
+              const isExtreme = Math.abs(anomaly.z_score) > 3 || Math.abs(anomaly.deviation) > 0.15;
+              return {
+                name: '', // 移除异常点名称，避免显示"异常点"文字
+                value: chartData.delta[anomaly.index],
+                xAxis: anomaly.index,
+                yAxis: chartData.delta[anomaly.index],
+                itemStyle: {
+                  color: isExtreme ? '#ff0000' : anomaly.z_score > 2.5 ? '#ff5500' : '#ffaa00',
+                  shadowBlur: isExtreme ? 10 : 5,
+                  shadowColor: 'rgba(255, 0, 0, 0.5)',
+                  borderColor: '#fff',
+                  borderWidth: isExtreme ? 2 : 1
+                },
+                symbol: isExtreme ? 'diamond' : 'circle',
+                symbolSize: isExtreme ? 14 : anomaly.z_score > 2.5 ? 10 : 8,
+                label: {
+                  show: false, // 完全禁用标签显示
+                  distance: 5,
+                  color: '#ff0000',
+                  fontWeight: 'bold'
+                },
+                emphasis: {
+                  scale: true,
+                  scaleSize: 2
+                }
+              };
+            })
           }
         }
       ]
@@ -725,12 +786,15 @@ const RatioAnalysis: React.FC = () => {
                       option={getRatioChartOption()}
                       style={{ height: 400 }}
                       notMerge={true}
+                      key={`ratio-chart-${anomalyThreshold}-${chartData._timestamp || 'default'}`}
                     />
                     {showDelta && (
                       <ReactECharts
                         option={getDeltaChartOption()}
                         style={{ height: 300, marginTop: 16 }}
                         notMerge={true}
+                        key={`delta-chart-${anomalyThreshold}-${chartData._timestamp || 'default'}`}
+                        opts={{ renderer: 'svg' }}
                       />
                     )}
                   </div>

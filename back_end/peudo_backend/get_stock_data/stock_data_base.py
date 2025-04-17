@@ -94,6 +94,11 @@ class StockKlineDatabase:
                     continue
                 self._create_table_if_not_exists(table_name)
 
+                # 格式化数值字段，保留四位小数
+                amplitude = round(data['amplitude'], 4) if data['amplitude'] is not None else 0.0
+                change_pct = round(data['change_pct'], 4) if data['change_pct'] is not None else 0.0
+                turnover = round(data['turnover'], 4) if data['turnover'] is not None else 0.0
+
                 # 执行插入（自动去重）
                 self.conn.execute(f'''
                     INSERT OR REPLACE INTO {table_name}
@@ -107,10 +112,10 @@ class StockKlineDatabase:
                     data['low'],
                     data['volume'],
                     data['amount'],
-                    data['amplitude'],
-                    data['change_pct'],
+                    amplitude,  # 保留四位小数的振幅
+                    change_pct, # 保留四位小数的涨跌幅
                     data['change_amt'],
-                    data['turnover']
+                    turnover    # 保留四位小数的换手率
                 ))
             self.conn.commit()
         except Exception as e:

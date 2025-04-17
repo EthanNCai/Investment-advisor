@@ -109,6 +109,26 @@
       "code": "688256",
       "name": "寒武纪-U",
       "type": "A股"
+    },
+    {
+      "code": "AUTD",
+      "name": "黄金T+D",
+      "type": "黄金"
+    },
+    {
+      "code": "NYAuTN06",
+      "name": "纽约金TN06",
+      "type": "黄金"
+    },
+    {
+      "code": "aum",
+      "name": "沪金主连",
+      "type": "黄金"
+    },
+    {
+      "code": "au2506",
+      "name": "沪金2506",
+      "type": "黄金"
     }
   ]
 }

@@ -72,7 +72,8 @@ const AssetList = () => {
                                                 size="small" 
                                                 color={
                                                     asset.type === 'A股' ? 'error' : 
-                                                    asset.type === '港股' ? 'primary' : 'success'
+                                                    asset.type === '港股' ? 'primary' : 
+                                                    asset.type === '黄金' ? 'warning' : 'success'
                                                 }
                                             />
                                         </Box>

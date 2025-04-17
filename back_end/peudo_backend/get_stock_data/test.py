@@ -1,22 +1,27 @@
+
 import sys
 import os
-from pathlib import Path
+import time
 
-from back_end.peudo_backend.get_stock_data.get_stock_trends_data import StockTrendsData
+from back_end.peudo_backend.get_stock_data.get_stock_data_A_and_G import EastMoneyKLineSpider
+from back_end.peudo_backend.get_stock_data.stock_data_base import StockKlineDatabase
 
-# 将父目录添加到模块搜索路径中
-parent_dir = str(Path(__file__).parent.parent)
-if parent_dir not in sys.path:
-    sys.path.append(parent_dir)
-
-from k_chart_fetcher import k_chart_fetcher
+# 添加项目根目录到python路径
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.abspath(os.path.join(current_dir, "../../../"))
+sys.path.append(project_root)
 
 if __name__ == '__main__':
-    trends_data = StockTrendsData('600988')
-    print(trends_data.get_trends())
-    data = trends_data.get_trends()
-    print(len(data['trends']))
-    print(trends_data.format_klines(data['trends']))
+    splider = EastMoneyKLineSpider('AUTD')
+    data = splider.get_klines()
+    data_list = splider.format_klines(data['klines'])
+    db = StockKlineDatabase()
+    db.insert_kline_data(data_list, data['code'], data['name'], data['type'])
+    result = db.query_kline(
+        stock_code='AUTD',
+        start_date='2023-07-10',
+        end_date='2025-04-13'
+    )
+    print(result)
 
-    # print(k_chart_fetcher('002594', '399001', '1y', 2, 1.5))
 

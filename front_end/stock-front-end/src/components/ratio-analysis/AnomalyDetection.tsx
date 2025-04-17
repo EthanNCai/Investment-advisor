@@ -33,12 +33,14 @@ const AnomalyDetection: React.FC<AnomalyDetectionProps> = ({
 }) => {
   const handleThresholdChange = (value: number) => {
     if (onThresholdChange) {
+      console.log("AnomalyDetection组件中更新阈值:", value);
       onThresholdChange(value);
     }
   };
 
-  const upperBound = anomalyInfo.upper_bound;
-  const lowerBound = anomalyInfo.lower_bound;
+  // 根据最新阈值计算上下界
+  const upperBound = anomalyInfo.mean + (threshold * anomalyInfo.std);
+  const lowerBound = anomalyInfo.mean - (threshold * anomalyInfo.std);
 
   const getWarningLabel = (level: 'normal' | 'medium' | 'high') => {
     switch (level) {
