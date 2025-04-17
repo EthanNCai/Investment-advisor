@@ -3,6 +3,7 @@ import { Select, message, notification, Spin, Space, Tabs, Card, Typography } fr
 import ReactECharts from 'echarts-for-react';
 import AnomalyDetection from './AnomalyDetection';
 import { SliderSelector } from '../selectors/SliderSelector';
+import { useLocalStorage } from '../../LocalStorageContext';
 
 // 使用Typography组件
 const { Text } = Typography;
@@ -55,16 +56,19 @@ interface StockInfo {
 }
 
 const RatioAnalysis: React.FC = () => {
-  const [selectedStockA, setSelectedStockA] = useState<string>('');
-  const [selectedStockB, setSelectedStockB] = useState<string>('');
-  const [selectedDuration, setSelectedDuration] = useState<string>("1y");
-  const [selectedDegree, setSelectedDegree] = useState<number>(3);
-  const [chartData, setChartData] = useState<ChartData | null>(null);
+  // 将关键状态替换为持久化存储
+  const [selectedStockA, setSelectedStockA] = useLocalStorage<string>('ratio-analysis-stockA', '');
+  const [selectedStockB, setSelectedStockB] = useLocalStorage<string>('ratio-analysis-stockB', '');
+  const [selectedDuration, setSelectedDuration] = useLocalStorage<string>('ratio-analysis-duration', "1y");
+  const [selectedDegree, setSelectedDegree] = useLocalStorage<number>('ratio-analysis-degree', 3);
+  const [chartData, setChartData] = useLocalStorage<ChartData | null>('ratio-analysis-chartData', null);
+  const [anomalyThreshold, setAnomalyThreshold] = useLocalStorage<number>('ratio-analysis-threshold', 2.0);
+  const [showDelta, setShowDelta] = useLocalStorage<boolean>('ratio-analysis-showDelta', true);
+  const [activeTab, setActiveTab] = useLocalStorage<string>('ratio-analysis-activeTab', '1');
+  
+  // 这些不需要持久化的状态
   const [stockList, setStockList] = useState<StockInfo[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
-  const [anomalyThreshold, setAnomalyThreshold] = useState<number>(2.0);
-  const [showDelta, setShowDelta] = useState<boolean>(true);
-  const [activeTab, setActiveTab] = useState<string>('1');
   
   // 从服务器获取股票列表
   useEffect(() => {
@@ -80,6 +84,14 @@ const RatioAnalysis: React.FC = () => {
     };
 
     fetchStockList();
+  }, []);
+
+  // 添加新的useEffect，当组件加载时如果有持久化的选择，自动加载图表数据
+  useEffect(() => {
+    if (selectedStockA && selectedStockB && !chartData) {
+      console.log("从持久化存储恢复数据，加载图表:", selectedStockA, selectedStockB);
+      updateChart(selectedStockA, selectedStockB, selectedDuration, selectedDegree, anomalyThreshold, false);
+    }
   }, []);
 
   // 添加新的useEffect，当两只股票都已选择时自动加载图表数据

@@ -37,8 +37,8 @@ const AnomalyDetection: React.FC<AnomalyDetectionProps> = ({
     }
   };
 
-  const upperBound = anomalyInfo.mean + threshold * anomalyInfo.std;
-  const lowerBound = anomalyInfo.mean - threshold * anomalyInfo.std;
+  const upperBound = anomalyInfo.upper_bound;
+  const lowerBound = anomalyInfo.lower_bound;
 
   const getWarningLabel = (level: 'normal' | 'medium' | 'high') => {
     switch (level) {

@@ -12,10 +12,10 @@ if parent_dir not in sys.path:
 from k_chart_fetcher import k_chart_fetcher
 
 if __name__ == '__main__':
-    trends_data = StockTrendsData('01810')
+    trends_data = StockTrendsData('600988')
     print(trends_data.get_trends())
     data = trends_data.get_trends()
-    print(data['name'])
+    print(len(data['trends']))
     print(trends_data.format_klines(data['trends']))
 
     # print(k_chart_fetcher('002594', '399001', '1y', 2, 1.5))
