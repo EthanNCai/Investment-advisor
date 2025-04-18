@@ -8,6 +8,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from get_stock_data.stock_data_base import StockKlineDatabase
+from get_stock_data.stock_trends_base import StockTrendsDatabase
+from get_stock_data.get_stock_trends_data import StockTrendsData
 from indicators.technical_indicators import calculate_indicators, calculate_price_ratio_anomaly
 from k_chart_fetcher import k_chart_fetcher, durations
 from kline_processor.processor import process_kline_by_type
@@ -208,6 +210,9 @@ async def search_top_assets(keyword: str):
         new_stock_info = await fetch_stock_from_api(keyword)
 
         if new_stock_info:
+            # 同时获取并保存该股票的当日价格趋势数据
+            get_stock_trends(keyword)
+            
             # 添加到搜索结果中
             searched_with_score.append((new_stock_info, 100))  # 给新爬取的股票最高分
 
@@ -223,8 +228,49 @@ async def search_top_assets(keyword: str):
 
 class StockKlineRequest(BaseModel):
     code: str  # 股票代码
-    kline_type: str  # K线类型: "daily"(日K), "weekly"(周K), "monthly"(月K), "yearly"(年K)
+    kline_type: str  # K线类型: "daily"(日K), "weekly"(周K), "monthly"(月K), "yearly"(年K), "realtime"(实时)
     duration: str  # 时间范围: "maximum", "5y", "2y", "1y", "1q", "1m"
+
+
+def get_stock_trends(stock_code: str):
+    """
+    获取股票当日价格趋势数据，如果数据库中没有则尝试从API获取
+    
+    参数:
+        stock_code: 股票代码
+        
+    返回:
+        趋势数据列表或空列表
+    """
+    try:
+        # 从数据库查询趋势数据
+        db = StockTrendsDatabase()
+        trends_data = db.query_trends(stock_code=stock_code)
+        
+        # 如果没有数据，尝试从API获取
+        if not trends_data:
+            # 获取新数据
+            trends_fetcher = StockTrendsData(stock_code)
+            api_trends_data = trends_fetcher.get_trends()
+            
+            if "error" not in api_trends_data and api_trends_data.get('trends'):
+                formatted_data = trends_fetcher.format_klines(api_trends_data['trends'])
+                
+                # 存储新数据到数据库
+                if formatted_data:
+                    db.insert_trends_data(
+                        data_list=formatted_data,
+                        code=api_trends_data['code'],
+                        name=api_trends_data['name'],
+                        type=api_trends_data['type']
+                    )
+                    # 重新查询数据库获取趋势数据
+                    trends_data = db.query_trends(stock_code=stock_code)
+        
+        return trends_data
+    except Exception as e:
+        print(f"获取股票趋势数据失败: {e}")
+        return []
 
 
 @app.post("/get_stock_kline/")
@@ -269,7 +315,15 @@ async def get_stock_kline(data: StockKlineRequest):
                 "rsi12": [55.1, 57.2, ...],
                 "rsi24": [53.6, 55.8, ...]
             }
-        }
+        },
+        "trends": [  // 仅在kline_type为"realtime"时返回
+            {
+                "date": "2025-04-18 09:30:00",
+                "current_price": 12.5,
+                "volume": 123456
+            },
+            ...
+        ]
     }
     """
     try:
@@ -308,19 +362,29 @@ async def get_stock_kline(data: StockKlineRequest):
             raise HTTPException(status_code=404, detail=f"股票 {data.code} 在指定时间范围内没有数据")
 
         # 处理K线类型 (日K, 周K, 月K, 年K)
-        kline_data = process_kline_by_type(records, data.kline_type)
+        # 注意：即使选择了"realtime"，也需要处理日K数据用于技术指标计算
+        k_type_for_processing = "daily" if data.kline_type == "realtime" else data.kline_type
+        kline_data = process_kline_by_type(records, k_type_for_processing)
 
         # 计算技术指标
         indicators = calculate_indicators(kline_data)
 
-        # 构建响应
-        return {
+        # 构建基本响应
+        response = {
             "code": stock_info["code"],
             "name": stock_info["name"],
             "type": stock_info["type"],
             "kline_data": kline_data,
             "indicators": indicators
         }
+        
+        # 如果是实时K线类型，获取当日价格趋势数据
+        if data.kline_type == "realtime":
+            trends_data = get_stock_trends(data.code)
+            if trends_data:
+                response["trends"] = trends_data
+
+        return response
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -330,7 +394,7 @@ if __name__ == "__main__":
     import uvicorn
 
     # 启动自动更新服务
-    update_threads = start_auto_update_services()
+    # update_threads = start_auto_update_services()
 
     # 启动API服务
     uvicorn.run(app, host="localhost", port=8000)

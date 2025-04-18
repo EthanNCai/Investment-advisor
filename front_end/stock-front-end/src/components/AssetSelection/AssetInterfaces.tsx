@@ -17,6 +17,13 @@ export interface KlineDataPoint {
     volume: number;
 }
 
+// 股票趋势数据点接口
+export interface TrendDataPoint {
+    date: string;          // 格式: "2025-04-18 09:30:00"
+    current_price: number; // 当前价格
+    volume: number;        // 成交量
+}
+
 // MACD指标接口
 export interface MacdIndicator {
     dif: number[];
@@ -57,10 +64,11 @@ export interface StockKlineData {
     type: string;
     kline_data: KlineDataPoint[];
     indicators: TechnicalIndicators;
+    trends?: TrendDataPoint[]; // 实时价格趋势数据，仅在klineType为'realtime'时有值
 }
 
 // K线类型
-export type KlineType = 'daily' | 'weekly' | 'monthly' | 'yearly';
+export type KlineType = 'daily' | 'weekly' | 'monthly' | 'yearly' | 'realtime';
 
 // 资产选择上下文
 export interface AssetSelectionContext {

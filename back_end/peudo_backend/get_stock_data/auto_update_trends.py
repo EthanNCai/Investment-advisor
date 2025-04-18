@@ -199,19 +199,19 @@ def start_auto_update_services():
     trends_thread.start()
     print("趋势数据自动更新服务已启动")
 
-    # 启动历史K线数据更新线程（每30分钟更新一次）
-    kline_thread = threading.Thread(
-        target=auto_update_kline_history,
-        args=(20, 0.5),
-        daemon=True,
-        name="KlineUpdateThread"
-    )
-    kline_thread.start()
-    print("历史K线数据自动更新服务已启动，更新频率：每30分钟")
+    # # 启动历史K线数据更新线程（每30分钟更新一次）
+    # kline_thread = threading.Thread(
+    #     target=auto_update_kline_history,
+    #     args=(20, 0.5),
+    #     daemon=True,
+    #     name="KlineUpdateThread"
+    # )
+    # kline_thread.start()
+    # print("历史K线数据自动更新服务已启动，更新频率：每30分钟")
 
     return {
         "trends_thread": trends_thread,
-        "kline_thread": kline_thread
+        # "kline_thread": kline_thread
     }
 
 

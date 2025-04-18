@@ -39,7 +39,8 @@ const StockKlineChart = () => {
         klineData, 
         selectedIndicators, 
         selectedAsset,
-        isLoading 
+        isLoading,
+        klineType
     } = context;
     
     const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
@@ -88,6 +89,13 @@ const StockKlineChart = () => {
         j: selectedIndicators.includes('kdj') && klineData.indicators.kdj ? klineData.indicators.kdj.j[index] : null,
     }));
     
+    // 构建实时价格趋势数据
+    const trendData = klineData.trends ? klineData.trends.map(item => ({
+        date: item.date,
+        price: item.current_price,
+        volume: item.volume
+    })) : [];
+    
     // 处理MACD数据，仅保留DIF和DEA都不为0的数据
     const validMacdData = chartData.filter(item => {
         return item.dif !== null && item.dif !== 0 && item.dea !== null && item.dea !== 0;
@@ -98,7 +106,9 @@ const StockKlineChart = () => {
         if (active && payload && payload.length) {
             return (
                 <Paper sx={{ p: 1, boxShadow: 3, backgroundColor: 'rgba(255, 255, 255, 0.9)' }}>
-                    <Typography sx={{ fontWeight: 'bold', mb: 1 }}>日期: {label}</Typography>
+                    <Typography sx={{ fontWeight: 'bold', mb: 1 }}>
+                        {klineType === 'realtime' ? label : `日期: ${label}`}
+                    </Typography>
                     {payload.map((entry: any, index: number) => (
                         <Box key={`item-${index}`} sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
                             <Box 
@@ -116,100 +126,186 @@ const StockKlineChart = () => {
         return null;
     };
     
-    const renderPriceChart = () => (
-        <ResponsiveContainer width="100%" height={400}>
-            <LineChart
-                data={chartData}
-                margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-            >
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis 
-                    dataKey="date" 
-                    scale="band"
-                    tick={{ fontSize: 12 }}
-                    tickFormatter={(value) => value.substring(5)} // 只显示月-日
-                />
-                <YAxis 
-                    yAxisId="left"
-                    domain={['auto', 'auto']}
-                    tick={{ fontSize: 12 }}
-                    width={60}
-                />
-                <Tooltip content={<CustomTooltip />} />
-                <Legend />
-                <Line 
-                    type="monotone" 
-                    dataKey="close" 
-                    stroke="#ff7300" 
-                    yAxisId="left" 
-                    dot={false}
-                    name="收盘价"
-                />
-                
-                {selectedIndicators.includes('ma') && (
-                    <>
+    const renderPriceChart = () => {
+        // 实时价格趋势图
+        if (klineType === 'realtime' && klineData.trends && klineData.trends.length > 0) {
+            return (
+                <ResponsiveContainer width="100%" height={400}>
+                    <LineChart
+                        data={trendData}
+                        margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                    >
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis 
+                            dataKey="date" 
+                            scale="band"
+                            tick={{ fontSize: 12 }}
+                            tickFormatter={(value) => {
+                                // 显示时间部分 "HH:MM"
+                                const parts = value.split(' ');
+                                if (parts.length >= 2) {
+                                    const timeParts = parts[1].split(':');
+                                    return `${timeParts[0]}:${timeParts[1]}`;
+                                }
+                                return value;
+                            }}
+                        />
+                        <YAxis 
+                            yAxisId="left"
+                            domain={['auto', 'auto']}
+                            tick={{ fontSize: 12 }}
+                            width={60}
+                        />
+                        <Tooltip content={<CustomTooltip />} />
+                        <Legend />
                         <Line 
                             type="monotone" 
-                            dataKey="ma5" 
-                            stroke="#8884d8" 
+                            dataKey="price" 
+                            stroke="#ff7300" 
                             yAxisId="left" 
                             dot={false}
-                            name="MA5"
+                            name="当前价格"
                         />
-                        <Line 
-                            type="monotone" 
-                            dataKey="ma10" 
-                            stroke="#82ca9d" 
-                            yAxisId="left" 
-                            dot={false}
-                            name="MA10"
-                        />
-                        <Line 
-                            type="monotone" 
-                            dataKey="ma20" 
-                            stroke="#ffc658" 
-                            yAxisId="left" 
-                            dot={false}
-                            name="MA20"
-                        />
-                        <Line 
-                            type="monotone" 
-                            dataKey="ma60" 
-                            stroke="#9467bd" 
-                            yAxisId="left" 
-                            dot={false}
-                            name="MA60"
-                        />
-                    </>
-                )}
-            </LineChart>
-        </ResponsiveContainer>
-    );
+                    </LineChart>
+                </ResponsiveContainer>
+            );
+        }
+        
+        // 标准K线图
+        return (
+            <ResponsiveContainer width="100%" height={400}>
+                <LineChart
+                    data={chartData}
+                    margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                >
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis 
+                        dataKey="date" 
+                        scale="band"
+                        tick={{ fontSize: 12 }}
+                        tickFormatter={(value) => value.substring(5)} // 只显示月-日
+                    />
+                    <YAxis 
+                        yAxisId="left"
+                        domain={['auto', 'auto']}
+                        tick={{ fontSize: 12 }}
+                        width={60}
+                    />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Legend />
+                    <Line 
+                        type="monotone" 
+                        dataKey="close" 
+                        stroke="#ff7300" 
+                        yAxisId="left" 
+                        dot={false}
+                        name="收盘价"
+                    />
+                    
+                    {selectedIndicators.includes('ma') && (
+                        <>
+                            <Line 
+                                type="monotone" 
+                                dataKey="ma5" 
+                                stroke="#8884d8" 
+                                yAxisId="left" 
+                                dot={false}
+                                name="MA5"
+                            />
+                            <Line 
+                                type="monotone" 
+                                dataKey="ma10" 
+                                stroke="#82ca9d" 
+                                yAxisId="left" 
+                                dot={false}
+                                name="MA10"
+                            />
+                            <Line 
+                                type="monotone" 
+                                dataKey="ma20" 
+                                stroke="#ffc658" 
+                                yAxisId="left" 
+                                dot={false}
+                                name="MA20"
+                            />
+                            <Line 
+                                type="monotone" 
+                                dataKey="ma60" 
+                                stroke="#9467bd" 
+                                yAxisId="left" 
+                                dot={false}
+                                name="MA60"
+                            />
+                        </>
+                    )}
+                </LineChart>
+            </ResponsiveContainer>
+        );
+    };
     
-    const renderVolumeChart = () => (
-        <ResponsiveContainer width="100%" height={400}>
-            <BarChart
-                data={chartData}
-                margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-            >
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis 
-                    dataKey="date" 
-                    scale="band"
-                    tick={{ fontSize: 12 }}
-                    tickFormatter={(value) => value.substring(5)} // 只显示月-日
-                />
-                <YAxis 
-                    tick={{ fontSize: 12 }}
-                    width={80}
-                    tickFormatter={(value) => value >= 10000 ? `${(value / 10000).toFixed(1)}万` : value}
-                />
-                <Tooltip content={<CustomTooltip />} />
-                <Legend />
-                <Bar dataKey="volume" fill="#8884d8" name="成交量" />
-            </BarChart>
-        </ResponsiveContainer>
-    );
+    const renderVolumeChart = () => {
+        // 实时成交量图
+        if (klineType === 'realtime' && klineData.trends && klineData.trends.length > 0) {
+            return (
+                <ResponsiveContainer width="100%" height={400}>
+                    <BarChart
+                        data={trendData}
+                        margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                    >
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis 
+                            dataKey="date" 
+                            scale="band"
+                            tick={{ fontSize: 12 }}
+                            tickFormatter={(value) => {
+                                // 显示时间部分 "HH:MM"
+                                const parts = value.split(' ');
+                                if (parts.length >= 2) {
+                                    const timeParts = parts[1].split(':');
+                                    return `${timeParts[0]}:${timeParts[1]}`;
+                                }
+                                return value;
+                            }}
+                        />
+                        <YAxis 
+                            tick={{ fontSize: 12 }}
+                            width={80}
+                            tickFormatter={(value) => value >= 10000 ? `${(value / 10000).toFixed(1)}万` : value}
+                        />
+                        <Tooltip content={<CustomTooltip />} />
+                        <Legend />
+                        <Bar dataKey="volume" fill="#8884d8" name="成交量" />
+                    </BarChart>
+                </ResponsiveContainer>
+            );
+        }
+        
+        // 标准成交量图
+        return (
+            <ResponsiveContainer width="100%" height={400}>
+                <BarChart
+                    data={chartData}
+                    margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                >
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis 
+                        dataKey="date" 
+                        scale="band"
+                        tick={{ fontSize: 12 }}
+                        tickFormatter={(value) => value.substring(5)} // 只显示月-日
+                    />
+                    <YAxis 
+                        tick={{ fontSize: 12 }}
+                        width={80}
+                        tickFormatter={(value) => value >= 10000 ? `${(value / 10000).toFixed(1)}万` : value}
+                    />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Legend />
+                    <Bar dataKey="volume" fill="#8884d8" name="成交量" />
+                </BarChart>
+            </ResponsiveContainer>
+        );
+    };
     
     const renderMACDChart = () => (
         <ResponsiveContainer width="100%" height={400}>

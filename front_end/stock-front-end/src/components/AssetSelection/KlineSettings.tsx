@@ -77,10 +77,12 @@ const KlineSettings = () => {
                     size="small"
                     fullWidth
                 >
+                    <ToggleButton value="realtime">实时</ToggleButton>
                     <ToggleButton value="daily">日K</ToggleButton>
                     <ToggleButton value="weekly">周K</ToggleButton>
                     <ToggleButton value="monthly">月K</ToggleButton>
                     <ToggleButton value="yearly">年K</ToggleButton>
+
                 </ToggleButtonGroup>
             </Box>
             
