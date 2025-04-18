@@ -13,6 +13,8 @@ from k_chart_fetcher import k_chart_fetcher, durations
 from kline_processor.processor import process_kline_by_type
 # 导入模块化后的函数
 from stock_search.searcher import score_match, is_stock_code_format, fetch_stock_from_api
+# 导入自动更新服务
+from get_stock_data.auto_update_trends import start_auto_update_services
 
 app = FastAPI()
 
@@ -49,9 +51,9 @@ async def search_stocks(keyword: str):
             stock_info_json = json.load(file)
             stock_info_list = stock_info_json['stocks']
 
-        # 如果关键词为空，返回空结果
-        if not keyword.strip():
-            return {"result": []}
+            # 如果关键词为空，返回空结果
+            if not keyword.strip():
+                return {"result": []}
 
         # 搜索匹配的股票并进行评分
         matched_stocks = search_stocks_with_score(stock_info_list, keyword)
@@ -327,4 +329,8 @@ async def get_stock_kline(data: StockKlineRequest):
 if __name__ == "__main__":
     import uvicorn
 
+    # 启动自动更新服务
+    update_threads = start_auto_update_services()
+
+    # 启动API服务
     uvicorn.run(app, host="localhost", port=8000)

@@ -328,7 +328,7 @@ def calculate_price_ratio_anomaly(ratio_data: List[float], delta_data: List[floa
         exceeds_absolute_threshold = absolute_deviation > absolute_threshold
         
         # 使用综合条件筛选潜在异常点
-        if z_score > 2.0 or deviation_pct > 10.0 or exceeds_absolute_threshold:
+        if z_score > 2.0 or deviation_pct > 12.0 or exceeds_absolute_threshold:
             # 计算综合分数 - 考虑所有因素
             # 基于Z分数，但增加偏离度的权重
             combined_score = z_score * (1 + min(deviation_pct / 20, 1.0))

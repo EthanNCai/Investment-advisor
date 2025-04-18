@@ -542,14 +542,20 @@ const RatioAnalysis: React.FC = () => {
           },
           markPoint: {
             data: chartData.anomaly_info.anomalies.map(anomaly => {
+              // 修改异常点判定条件，仅当Z分数>3或偏离度>15%时为极端异常
               const isExtreme = Math.abs(anomaly.z_score) > 3 || Math.abs(anomaly.deviation) > 0.15;
+              // 计算偏离度百分比，便于颜色判断
+              const deviationPct = Math.abs(anomaly.deviation * 100);
               return {
                 name: '', // 移除异常点名称，避免显示"异常点"文字
                 value: chartData.delta[anomaly.index],
                 xAxis: anomaly.index,
                 yAxis: chartData.delta[anomaly.index],
                 itemStyle: {
-                  color: isExtreme ? '#ff0000' : anomaly.z_score > 2.5 ? '#ff5500' : '#ffaa00',
+                  // 修改颜色逻辑: 仅当偏离度>15%时为红色
+                  color: deviationPct > 15 ? '#ff0000' : 
+                         deviationPct > 10 ? '#ff5500' : 
+                         deviationPct > 5 ? '#ffaa00' : '#1890ff',
                   shadowBlur: isExtreme ? 10 : 5,
                   shadowColor: 'rgba(255, 0, 0, 0.5)',
                   borderColor: '#fff',

@@ -31,7 +31,7 @@ const AssetTypeFilter = () => {
                             height: 3
                         },
                         '& .MuiTab-root': {
-                            minWidth: 0,
+                            minWidth: 80,
                             padding: '12px 16px',
                             '&:hover': {
                                 opacity: 1

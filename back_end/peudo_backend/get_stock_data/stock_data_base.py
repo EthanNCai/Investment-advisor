@@ -85,7 +85,7 @@ class StockKlineDatabase:
         """批量插入K线数据"""
         try:
             for data in data_list:
-                # 注意：不再更新stock_list.json，这个功能由fetch_stock_from_api处理
+                # 更新stock_list.json由fetch_stock_from_api处理
                 date_str = data['date']
                 year = int(date_str.split('-')[0])
                 table_name, base_year = self._get_partition_table(year)
@@ -118,6 +118,7 @@ class StockKlineDatabase:
                     turnover    # 保留四位小数的换手率
                 ))
             self.conn.commit()
+            return True
         except Exception as e:
             self.conn.rollback()
             raise e

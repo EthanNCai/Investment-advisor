@@ -91,7 +91,7 @@ const AnomalyDetection: React.FC<AnomalyDetectionProps> = ({
       dataIndex: 'deviation',
       key: 'deviation',
       render: (deviation: number) => {
-        let color = Math.abs(deviation) > 0.1 ? 'red' : Math.abs(deviation) > 0.05 ? 'orange' : 'green';
+        let color = Math.abs(deviation) > 0.15 ? 'red' : Math.abs(deviation) > 0.05 ? 'orange' : 'green';
         return <Tag color={color}>{(deviation * 100).toFixed(2)}%</Tag>;
       },
     },
