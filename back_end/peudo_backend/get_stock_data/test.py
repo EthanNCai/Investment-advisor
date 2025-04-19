@@ -10,7 +10,7 @@ project_root = os.path.abspath(os.path.join(current_dir, "../../../"))
 sys.path.append(project_root)
 
 if __name__ == '__main__':
-    data_trends = StockTrendsData('NYAuTN06')
+    data_trends = StockTrendsData('00700')
     print(data_trends.get_trends())
 
 

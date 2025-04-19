@@ -1,5 +1,10 @@
 import numpy as np
 from typing import List, Dict, Any, Optional
+from sklearn.ensemble import IsolationForest
+import warnings
+
+# 忽略sklearn的警告
+warnings.filterwarnings('ignore')
 
 
 def calculate_indicators(kline_data: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -280,7 +285,7 @@ def calculate_kdj(highs: np.ndarray, lows: np.ndarray, closes: np.ndarray, n: in
 
 def calculate_price_ratio_anomaly(ratio_data: List[float], delta_data: List[float], threshold_multiplier: float, std_value: float) -> Dict:
     """
-    计算价差异常值并生成预警信息，同时考虑Z分数、偏离度和绝对偏差阈值
+    计算价差异常值并生成预警信息，使用统计方法和机器学习模型(Isolation Forest)的组合
     
     Args:
         ratio_data: 价差数据列表
@@ -300,13 +305,31 @@ def calculate_price_ratio_anomaly(ratio_data: List[float], delta_data: List[floa
             "upper_bound": 0,
             "lower_bound": 0
         }
-    
+
     # 计算基础统计值
     mean_ratio = sum(ratio_data) / len(ratio_data)
     std = std_value  # 使用传入的原始标准差
     
     # 计算绝对阈值 - 用户设置的阈值倍数乘以标准差
     absolute_threshold = threshold_multiplier * std
+
+    # 我们将ratio和delta作为特征，这样模型可以同时考虑原始价格比率和与拟合线的偏差
+    X = np.column_stack((ratio_data, delta_data))
+    
+    # 应用Isolation Forest异常检测模型
+    # contamination参数表示预期的异常点比例，这里使用较保守的值0.10（10%）
+    try:
+        # 只有当数据点足够多时才使用机器学习模型
+        if len(ratio_data) >= 20:
+            clf = IsolationForest(n_estimators=100, contamination=0.10, random_state=42)
+            ml_predictions = clf.fit_predict(X)
+            # 转换预测结果：-1表示异常，1表示正常
+            ml_anomaly_indices = [i for i, pred in enumerate(ml_predictions) if pred == -1]
+        else:
+            ml_anomaly_indices = []
+    except Exception as e:
+        print(f"机器学习模型异常检测失败: {e}")
+        ml_anomaly_indices = []
     
     # 检测异常值 - 综合考虑多种指标
     anomalies = []
@@ -327,15 +350,22 @@ def calculate_price_ratio_anomaly(ratio_data: List[float], delta_data: List[floa
         # 检查是否超过绝对阈值 (用户设置的阈值*标准差)
         exceeds_absolute_threshold = absolute_deviation > absolute_threshold
         
+        # 检查是否被机器学习模型标记为异常
+        is_ml_anomaly = i in ml_anomaly_indices
+        
         # 使用综合条件筛选潜在异常点
-        if z_score > 2.0 or deviation_pct > 12.0 or exceeds_absolute_threshold:
-            # 计算综合分数 - 考虑所有因素
+        if z_score > 2.0 or deviation_pct > 12.0 or exceeds_absolute_threshold or is_ml_anomaly:
+            # 计算综合分数 - 考虑所有因素，包括机器学习结果
             # 基于Z分数，但增加偏离度的权重
             combined_score = z_score * (1 + min(deviation_pct / 20, 1.0))
             
             # 如果超过绝对阈值，额外提高分数
             if exceeds_absolute_threshold:
                 combined_score *= 1.2
+                
+            # 如果被机器学习模型标记为异常，进一步提高分数
+            if is_ml_anomaly:
+                combined_score *= 1.5
                 
             potential_anomalies.append({
                 "index": i,
@@ -345,6 +375,7 @@ def calculate_price_ratio_anomaly(ratio_data: List[float], delta_data: List[floa
                 "deviation_pct": deviation_pct,
                 "absolute_deviation": absolute_deviation,
                 "exceeds_threshold": exceeds_absolute_threshold,
+                "is_ml_anomaly": is_ml_anomaly,
                 "combined_score": combined_score
             })
     
@@ -354,16 +385,17 @@ def calculate_price_ratio_anomaly(ratio_data: List[float], delta_data: List[floa
     # 取分数最高的点作为确认的异常点（最多取原始数据的15%，至少6个点）
     max_anomalies = max(int(len(ratio_data) * 0.15), 6)
     for anomaly in potential_anomalies[:max_anomalies]:
-        # 提高异常判定标准：综合分数必须大于2.0，或者超过绝对阈值
-        if anomaly["combined_score"] > 2.0 or anomaly["exceeds_threshold"]:
+        # 提高异常判定标准：综合分数必须大于2.2，或者超过绝对阈值，或被机器学习模型标记为异常
+        if anomaly["combined_score"] > 2.2 or anomaly["exceeds_threshold"] or anomaly["is_ml_anomaly"]:
             anomalies.append({
                 "index": anomaly["index"],
                 "value": anomaly["value"],
                 "z_score": anomaly["z_score"],
-                "deviation": anomaly["deviation"]
+                "deviation": anomaly["deviation"],
+                "is_ml_anomaly": anomaly["is_ml_anomaly"]
             })
     
-    # 确定预警级别 - 使用综合评分、Z分数、偏离度和绝对阈值
+    # 确定预警级别 - 使用综合评分、Z分数、偏离度、绝对阈值和机器学习结果
     warning_level = "normal"
     if anomalies:
         # 找出各种异常指标的最大值
@@ -377,15 +409,20 @@ def calculate_price_ratio_anomaly(ratio_data: List[float], delta_data: List[floa
         threshold_exceeded_count = sum(1 for a in potential_anomalies if a["exceeds_threshold"])
         threshold_exceeded_ratio = threshold_exceeded_count / len(ratio_data) if ratio_data else 0
         
+        # 计算被机器学习标记为异常的点数
+        ml_anomaly_count = sum(1 for a in anomalies if a.get("is_ml_anomaly", False))
+        
         # 根据多个指标综合判断风险级别
         if ((max_z_score > 3.0 and max_deviation_pct > 15.0) or 
             max_deviation_pct > 25.0 or 
-            (threshold_exceeded_count >= 3 and threshold_exceeded_ratio > 0.05)):
+            (threshold_exceeded_count >= 3 and threshold_exceeded_ratio > 0.05) or
+            ml_anomaly_count >= 3):
             warning_level = "high"
         elif ((max_z_score > 2.5 and max_deviation_pct > 10.0) or 
               max_deviation_pct > 15.0 or 
               max_z_score > 3.0 or
-              (threshold_exceeded_count >= 2)):
+              (threshold_exceeded_count >= 2) or
+              ml_anomaly_count >= 1):
             warning_level = "medium"
     
     # 计算上下界 - 使用用户设置的阈值倍数计算
