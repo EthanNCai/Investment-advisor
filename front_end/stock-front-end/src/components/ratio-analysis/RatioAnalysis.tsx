@@ -4,6 +4,7 @@ import ReactECharts from 'echarts-for-react';
 import AnomalyDetection from './AnomalyDetection';
 import { SliderSelector } from '../selectors/SliderSelector';
 import { useLocalStorage } from '../../LocalStorageContext';
+import PredictionAnalysis from '../prediction/PredictionAnalysis';
 
 // 使用Typography组件
 const { Text } = Typography;
@@ -815,6 +816,17 @@ const RatioAnalysis: React.FC = () => {
                     dates={chartData.dates}
                     threshold={anomalyThreshold}
                     onThresholdChange={handleThresholdChange}
+                  />
+                )
+              },
+              {
+                key: '3',
+                label: '预测分析',
+                children: chartData && (
+                  <PredictionAnalysis
+                    chartData={chartData}
+                    stockA={selectedStockA}
+                    stockB={selectedStockB}
                   />
                 )
               }

@@ -198,7 +198,3 @@ if __name__ == '__main__':
     # print(result)
     # # db.cleanup_old_data()
     # db.close()
-
-
-
-

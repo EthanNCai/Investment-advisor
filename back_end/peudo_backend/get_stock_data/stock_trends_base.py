@@ -79,16 +79,16 @@ class StockTrendsDatabase:
     def query_trends(self, stock_code: str, date: str = None) -> List[Dict]:
         """
         查询指定股票的价格趋势数据，不限制日期
-        
+
         参数:
             stock_code: 股票代码
             date: 参数保留但不再使用，为保持兼容性
-            
+
         返回:
             趋势数据列表
         """
         cursor = self.conn.cursor()
-        
+
         # 直接查询该股票的所有趋势数据，按日期升序排序
         cursor.execute('''
             SELECT stock_code, date, current_price, volume, record_time
@@ -96,19 +96,19 @@ class StockTrendsDatabase:
             WHERE stock_code = ?
             ORDER BY date ASC
         ''', (stock_code,))
-        
+
         # 将结果转换为字典列表
         columns = [column[0] for column in cursor.description]
         result = []
         for row in cursor.fetchall():
             result.append(dict(zip(columns, row)))
-        
+
         return result
 
     def clear_outdated_trends(self, stock_code: str = None):
         """
         清理非当天的数据
-        
+
         参数:
             stock_code: 股票代码，如果提供则只清理该股票的数据
         """
@@ -145,7 +145,7 @@ class StockTrendsDatabase:
     def check_stock_date_current(self, stock_code: str) -> Tuple[bool, str]:
         """
         检查股票数据是否为当天
-        
+
         返回:
             (是否当天, 最新日期)
         """
@@ -169,7 +169,7 @@ class StockTrendsDatabase:
     def clear_trends_data(self, stock_code: str = None, date: str = None):
         """
         清除趋势数据
-        
+
         参数:
             stock_code: 股票代码，如果提供则只清除该股票的数据
             date: 日期，格式为'YYYY-MM-DD'，如果提供则只清除该日期的数据
