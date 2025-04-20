@@ -1,0 +1,9 @@
+fastapi==0.95.0
+uvicorn==0.21.1
+pydantic==1.10.7
+numpy==1.24.2
+scikit-learn==1.2.2
+pandas==2.0.0
+tensorflow==2.12.0  # 如果使用CPU版本
+# tensorflow-gpu==2.12.0  # 如果使用GPU版本
+matplotlib==3.7.1 
