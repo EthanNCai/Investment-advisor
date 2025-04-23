@@ -9,7 +9,7 @@ import AccountCircle from '@mui/icons-material/AccountCircle';
 import MenuItem from '@mui/material/MenuItem';
 import Menu from '@mui/material/Menu';
 import Button from '@mui/material/Button';
-import { Link as RouterLink } from 'react-router-dom';
+import {Link as RouterLink} from 'react-router-dom';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 
 export default function MenuAppBar() {
@@ -24,7 +24,7 @@ export default function MenuAppBar() {
     };
 
     return (
-        <Box sx={{ flexGrow: 1 }}>
+        <Box sx={{flexGrow: 1}}>
             <AppBar position="static">
                 <Toolbar>
                     <IconButton
@@ -32,40 +32,48 @@ export default function MenuAppBar() {
                         edge="start"
                         color="inherit"
                         aria-label="menu"
-                        sx={{ mr: 2 }}
+                        sx={{mr: 2}}
                     >
-                        <MenuIcon />
+                        <MenuIcon/>
                     </IconButton>
-                    <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
+                    <Typography variant="h6" component="div" sx={{flexGrow: 1}}>
                         资产价值比较分析
                     </Typography>
-                    
-                    <Button 
-                        color="inherit" 
-                        component={RouterLink} 
+
+                    <Button
+                        color="inherit"
+                        component={RouterLink}
                         to="/"
-                        sx={{ mx: 1 }}
+                        sx={{mx: 1}}
                     >
                         首页
                     </Button>
-                    <Button 
-                        color="inherit" 
-                        component={RouterLink} 
+                    <Button
+                        color="inherit"
+                        component={RouterLink}
                         to="/assets"
-                        sx={{ mx: 1 }}
+                        sx={{mx: 1}}
                     >
                         资产选择
                     </Button>
-                    <Button 
-                        color="inherit" 
-                        component={RouterLink} 
+                    <Button
+                        color="inherit"
+                        component={RouterLink}
                         to="/ratio-analysis"
-                        sx={{ mx: 1 }}
-                        startIcon={<TrendingUpIcon />}
+                        sx={{mx: 1}}
+                        startIcon={<TrendingUpIcon/>}
                     >
                         比值分析
                     </Button>
-
+                    <Button
+                        color="inherit"
+                        component={RouterLink}
+                        to="/investment-signals"
+                        sx={{mx: 1}}
+                        startIcon={<TrendingUpIcon/>}
+                    >
+                        投资信号
+                    </Button>
                     <div>
                         <IconButton
                             size="large"
@@ -75,7 +83,7 @@ export default function MenuAppBar() {
                             onClick={handleMenu}
                             color="inherit"
                         >
-                            <AccountCircle />
+                            <AccountCircle/>
                         </IconButton>
                         <Menu
                             id="menu-appbar"

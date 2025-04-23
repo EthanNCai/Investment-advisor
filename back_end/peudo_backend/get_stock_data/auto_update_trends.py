@@ -128,7 +128,7 @@ def auto_update_kline_history(batch_size: int = 20, interval_hours: float = 0.5)
                 stock_name = stock['name']
 
                 try:
-                    print(f"更新股票 {stock_code} ({stock_name}) 的历史K线数据")
+                    # print(f"更新股票 {stock_code} ({stock_name}) 的历史K线数据")
                     spider = EastMoneyKLineSpider(stock_code)
                     kline_data = spider.get_klines()
 

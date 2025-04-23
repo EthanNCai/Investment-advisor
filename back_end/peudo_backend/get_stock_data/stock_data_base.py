@@ -5,7 +5,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict
 
-from back_end.peudo_backend.get_stock_data.get_stock_data_A_and_G import EastMoneyKLineSpider
+# 修改导入路径，使用相对导入
+from .get_stock_data_A_and_G import EastMoneyKLineSpider
 
 
 class StockKlineDatabase:

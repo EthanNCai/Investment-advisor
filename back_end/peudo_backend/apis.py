@@ -1,24 +1,25 @@
 import json
+import traceback
 from datetime import datetime, timedelta
 # import torch
-from typing import List, Dict
+from typing import List, Dict, Optional
 
+import numpy as np
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from get_stock_data.get_stock_trends_data import StockTrendsData
 from get_stock_data.stock_data_base import StockKlineDatabase
 from get_stock_data.stock_trends_base import StockTrendsDatabase
-from get_stock_data.get_stock_trends_data import StockTrendsData
+from indicators.investment_signals import generate_investment_signals, analyze_current_position
 from indicators.technical_indicators import calculate_indicators, calculate_price_ratio_anomaly
-from k_chart_fetcher import k_chart_fetcher, durations
+from k_chart_fetcher import k_chart_fetcher, durations, get_stock_data_pair, date_alignment
 from kline_processor.processor import process_kline_by_type
+# 导入LSTM预测器
+from prediction import get_predictor
 # 导入模块化后的函数
 from stock_search.searcher import score_match, is_stock_code_format, fetch_stock_from_api
-# 导入自动更新服务
-from get_stock_data.auto_update_trends import start_auto_update_services
-# 导入LSTM预测器
-from prediction.lstm_predictor import LSTMPredictor
 
 app = FastAPI()
 
@@ -407,10 +408,10 @@ class PredictionRequestModel(BaseModel):
 async def predict_price_ratio(request: PredictionRequestModel):
     """
     使用时间序列模型预测未来价格比值走势
-    
+
     参数:
         request: 包含历史价格比值、日期和预测参数的请求对象
-        
+
     返回:
         预测结果，包含预测值、置信区间和模型性能指标
     """
@@ -423,30 +424,34 @@ async def predict_price_ratio(request: PredictionRequestModel):
         prediction_days = request.prediction_days
         confidence_level = request.confidence_level
         model_type = request.model_type
-        
+
         # 2. 数据验证
         if len(ratio_data) < 10:
             raise HTTPException(
-                status_code=400, 
+                status_code=400,
                 detail="历史数据太少，无法进行可靠预测。需要至少10个数据点。"
             )
-        
+
         if prediction_days > 180:
             raise HTTPException(
-                status_code=400, 
+                status_code=400,
                 detail="预测天数过长，超过180天的预测不可靠。请设置更短的预测期。"
             )
-        
-        # 3. 创建预测器实例
+
+        # 3. 获取合适的预测器实例
         try:
-            predictor = LSTMPredictor(cache_dir='model_cache')
+            # 使用工厂函数获取预测器，默认使用增强版LSTM
+            predictor = get_predictor(
+                model_type=model_type if model_type != "lstm" else "enhanced_lstm",
+                cache_dir='model_cache'
+            )
         except Exception as e:
             print(f"创建预测器失败: {e}")
             raise HTTPException(
-                status_code=500, 
+                status_code=500,
                 detail=f"创建预测器失败: {str(e)}"
             )
-        
+
         # 4. 使用预测器进行预测
         try:
             results = predictor.predict(
@@ -460,36 +465,36 @@ async def predict_price_ratio(request: PredictionRequestModel):
             )
         except Exception as e:
             print(f"预测过程发生错误: {e}")
-            
+
             # 如果实际模型预测失败，回退到模拟数据生成方式
             # 保持向前兼容性，确保前端不会因为后端错误而崩溃
             print("使用模拟数据作为回退方案")
-            
+
             # 下面是原有的模拟数据生成逻辑
             # 这段保留作为备份，当模型训练失败时使用
             import random
             random.seed(42)  # 固定随机种子，使结果可重现
-            
+
             # 计算一些统计值，用于模拟数据生成
             last_value = ratio_data[-1]
             mean_value = sum(ratio_data) / len(ratio_data)
-            
+
             # 计算历史数据的标准差，用于生成置信区间
             variance = sum((x - mean_value) ** 2 for x in ratio_data) / len(ratio_data)
             std_dev = variance ** 0.5
-            
+
             # 生成预测日期（从最后一天开始向后延伸）
             last_date = datetime.strptime(dates[-1], "%Y-%m-%d")
             predicted_dates = []
-            
+
             for i in range(1, prediction_days + 1):
                 next_date = last_date + timedelta(days=i)
                 predicted_dates.append(next_date.strftime("%Y-%m-%d"))
-            
+
             # 模拟趋势方向
             trend = random.choice([-1, 1])  # -1 表示下降，1 表示上升
             volatility = std_dev * 0.5  # 使用历史标准差的一半作为波动率
-            
+
             predicted_values = []
             for i in range(prediction_days):
                 # 添加趋势和随机波动
@@ -497,41 +502,41 @@ async def predict_price_ratio(request: PredictionRequestModel):
                 random_component = random.normalvariate(0, volatility)
                 predicted_value = last_value + trend_component + random_component
                 predicted_values.append(max(0.01, predicted_value))  # 确保比值为正
-            
+
             # 计算置信区间
             z_score = 1.96  # 95% 置信区间的Z分数
             if confidence_level == 0.9:
                 z_score = 1.645
             elif confidence_level == 0.99:
                 z_score = 2.576
-            
+
             margin = z_score * std_dev
             upper_bound = [value + margin for value in predicted_values]
             lower_bound = [value - margin for value in predicted_values]
-            
+
             # 计算模拟的模型性能指标
             performance = {
                 "mse": round(random.uniform(0.001, 0.01), 6),  # 均方误差
-                "rmse": round(random.uniform(0.03, 0.1), 6),   # 均方根误差
-                "mae": round(random.uniform(0.02, 0.08), 6),   # 平均绝对误差
-                "r2": round(random.uniform(0.7, 0.95), 6)      # R方值
+                "rmse": round(random.uniform(0.03, 0.1), 6),  # 均方根误差
+                "mae": round(random.uniform(0.02, 0.08), 6),  # 平均绝对误差
+                "r2": round(random.uniform(0.7, 0.95), 6)  # R方值
             }
-            
+
             # 确定风险级别和预测趋势
             risk_level = "medium"
             forecast_trend = "up" if trend > 0 else "down"
-            
+
             # 计算预测区间相对宽度
             avg_value = sum(predicted_values) / len(predicted_values)
             avg_interval_width = sum(u - l for u, l in zip(upper_bound, lower_bound)) / len(predicted_values)
             relative_width = avg_interval_width / avg_value
-            
+
             # 基于相对宽度确定风险级别
             if relative_width > 0.2:
                 risk_level = "high"
             elif relative_width < 0.1:
                 risk_level = "low"
-            
+
             # 返回模拟结果
             results = {
                 "dates": predicted_dates,
@@ -544,10 +549,10 @@ async def predict_price_ratio(request: PredictionRequestModel):
                 "risk_level": risk_level,
                 "forecast_trend": forecast_trend
             }
-        
+
         # 5. 返回预测结果
         return results
-        
+
     except HTTPException as e:
         # 直接重新抛出HTTP异常
         raise e
@@ -555,6 +560,136 @@ async def predict_price_ratio(request: PredictionRequestModel):
         # 处理其他异常
         print(f"预测价格比值时发生错误: {e}")
         raise HTTPException(status_code=500, detail=f"预测价格比值时发生错误: {str(e)}")
+
+
+class SignalRequestModel(BaseModel):
+    code_a: str
+    code_b: str
+    duration: str
+    degree: int = 3
+    threshold_arg: float = 2.0
+
+
+class SignalModel(BaseModel):
+    id: int
+    date: str
+    ratio: float
+    z_score: float
+    type: str  # 'positive' or 'negative'
+    strength: str  # 'weak', 'medium', 'strong'
+    description: str
+    recommendation: str
+
+
+class CurrentPositionModel(BaseModel):
+    current_ratio: float
+    nearest_signal_id: Optional[int]
+    similarity_score: Optional[float]
+    percentile: Optional[float]
+    is_extreme: bool
+    recommendation: str
+
+
+class SignalResponseModel(BaseModel):
+    signals: List[SignalModel]
+    current_position: CurrentPositionModel
+
+
+@app.post("/get_investment_signals/")
+async def get_investment_signals(request: SignalRequestModel):
+    """
+    获取两只股票的投资信号和当前位置分析
+
+    参数:
+        code_a: 股票A代码
+        code_b: 股票B代码
+        duration: 时间跨度 (1m, 1q, 1y, 2y, 5y, maximum)
+        degree: 多项式拟合的次数
+        threshold_arg: 阈值系数
+
+    返回:
+        包含信号列表和当前位置分析的响应对象
+    """
+    try:
+        # 1. 获取历史K线和价格比值数据
+        close_a_, close_b_, dates_a_, dates_b_ = get_stock_data_pair(request.code_a, request.code_b)
+        close_a, close_b, dates = date_alignment(close_a_, close_b_, dates_a_, dates_b_)
+
+        # 根据指定的时间跨度截取数据
+        duration_days = durations[request.duration]
+        if duration_days == -1 or duration_days >= len(close_a):
+            duration_days = len(close_a)
+
+        close_a = close_a[-duration_days:]
+        close_b = close_b[-duration_days:]
+        dates = dates[-duration_days:]
+
+        # 2. 生成投资信号
+        signals = generate_investment_signals(
+            close_a,
+            close_b,
+            dates,
+            request.degree,
+            request.threshold_arg
+        )
+
+        # 3. 获取当前最新价格趋势
+        db = StockTrendsDatabase()
+        trends_a = db.query_trends(stock_code=request.code_a)
+        trends_b = db.query_trends(stock_code=request.code_b)
+
+        # # 如果没有当前趋势数据，尝试获取
+        # if not trends_a:
+        #     trends_a = get_stock_trends(request.code_a)
+        # if not trends_b:
+        #     trends_b = get_stock_trends(request.code_b)
+
+        # 4. 分析当前位置
+        current_position = analyze_current_position(
+            request.code_a,
+            request.code_b,
+            close_a,
+            close_b,
+            dates,
+            signals,
+            trends_a,
+            trends_b,
+            request.degree
+        )
+
+        # 确保所有numpy类型都转换为Python原生类型
+        for signal in signals:
+            for key, value in signal.items():
+                if isinstance(value, (np.integer, np.floating, np.bool_)):
+                    if isinstance(value, np.bool_):
+                        signal[key] = bool(value)
+                    elif isinstance(value, np.integer):
+                        signal[key] = int(value)
+                    elif isinstance(value, np.floating):
+                        signal[key] = float(value)
+
+        # 确保current_position中的所有numpy类型都转换为Python原生类型
+        for key, value in current_position.items():
+            if isinstance(value, (np.integer, np.floating, np.bool_)):
+                if isinstance(value, np.bool_):
+                    current_position[key] = bool(value)
+                elif isinstance(value, np.integer):
+                    current_position[key] = int(value)
+                elif isinstance(value, np.floating):
+                    current_position[key] = float(value)
+
+        return {
+            "signals": signals,
+            "current_position": current_position
+        }
+
+    except Exception as e:
+        print(f"获取投资信号失败: {str(e)}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"获取投资信号失败: {str(e)}")
+
+
+
 
 
 if __name__ == "__main__":

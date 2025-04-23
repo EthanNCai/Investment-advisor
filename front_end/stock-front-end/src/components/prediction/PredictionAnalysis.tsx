@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Spin, Typography, Space, Select, InputNumber, Button, Tabs, message, Alert } from 'antd';
+import { Card, Spin, Typography, Space, Select, InputNumber, Button, Tabs, message, Alert, Form } from 'antd';
 import ReactECharts from 'echarts-for-react';
 import { useLocalStorage } from '../../LocalStorageContext';
 
@@ -35,12 +35,17 @@ const PredictionAnalysis: React.FC<PredictionAnalysisProps> = ({ chartData, stoc
   // 储存持久化设置
   const [predictionDays, setPredictionDays] = useLocalStorage<number>('prediction-days', 30);
   const [confidenceLevel, setConfidenceLevel] = useLocalStorage<number>('confidence-level', 0.95);
-  const [modelType, setModelType] = useLocalStorage<string>('model-type', 'lstm');
+  const [modelType, setModelType] = useLocalStorage<string>('model-type', 'enhanced_lstm');
   const [predictionData, setPredictionData] = useLocalStorage<PredictionData | null>('prediction-data', null);
   
   // 本地状态
   const [loading, setLoading] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<string>('1');
+
+  const modelOptions = [
+    { value: 'enhanced_lstm', label: '增强版LSTM模型' },
+    { value: 'lstm', label: '标准LSTM模型' }
+  ];
 
   // 当股票数据变化时，清除预测数据
   useEffect(() => {
@@ -338,17 +343,15 @@ const PredictionAnalysis: React.FC<PredictionAnalysisProps> = ({ chartData, stoc
                     </Select>
                   </div>
                 </div>
-                <div>
-                  <div style={{ marginBottom: 8 }}><Text>预测模型</Text></div>
-                  <Select 
-                    value={modelType} 
-                    onChange={(value) => setModelType(value)}
-                    style={{ width: '100%' }}
-                  >
-                    <Option value="lstm">LSTM (长短期记忆网络)</Option>
-                    <Option value="arima">ARIMA (自回归积分移动平均模型)</Option>
-                    <Option value="prophet">Prophet (Facebook时间序列预测)</Option>
-                  </Select>
+                <div style={{ marginBottom: 16 }}>
+                  <Form.Item label="预测模型">
+                    <Select
+                      value={modelType}
+                      onChange={setModelType}
+                      options={modelOptions}
+                      style={{ width: 170 }}
+                    />
+                  </Form.Item>
                 </div>
               </Card>
               

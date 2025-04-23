@@ -82,7 +82,7 @@ def calculate_macd(prices: np.ndarray, fast: int = 12, slow: int = 26, signal: i
         prices: 价格数组
         fast: 快线周期
         slow: 慢线周期
-        signal: 信号线周期
+        investment-signals: 信号线周期
         
     返回:
         包含DIF, DEA和MACD的字典
