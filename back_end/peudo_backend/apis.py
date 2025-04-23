@@ -2,13 +2,15 @@ import json
 import traceback
 from datetime import datetime, timedelta
 # import torch
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any, Union
 
 import numpy as np
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+import pandas as pd
 
+from get_stock_data.auto_update_trends import start_auto_update_services
 from get_stock_data.get_stock_trends_data import StockTrendsData
 from get_stock_data.stock_data_base import StockKlineDatabase
 from get_stock_data.stock_trends_base import StockTrendsDatabase
@@ -20,6 +22,8 @@ from kline_processor.processor import process_kline_by_type
 from prediction import get_predictor
 # 导入模块化后的函数
 from stock_search.searcher import score_match, is_stock_code_format, fetch_stock_from_api
+# 导入回测引擎
+from backtest.backtest_strategy import BacktestEngine
 
 app = FastAPI()
 
@@ -581,20 +585,6 @@ class SignalModel(BaseModel):
     recommendation: str
 
 
-class CurrentPositionModel(BaseModel):
-    current_ratio: float
-    nearest_signal_id: Optional[int]
-    similarity_score: Optional[float]
-    percentile: Optional[float]
-    is_extreme: bool
-    recommendation: str
-
-
-class SignalResponseModel(BaseModel):
-    signals: List[SignalModel]
-    current_position: CurrentPositionModel
-
-
 @app.post("/get_investment_signals/")
 async def get_investment_signals(request: SignalRequestModel):
     """
@@ -689,7 +679,41 @@ async def get_investment_signals(request: SignalRequestModel):
         raise HTTPException(status_code=500, detail=f"获取投资信号失败: {str(e)}")
 
 
+# 原始的 @app.post("/api/backtest/price_signal") 路由替换为以下更简洁的版本
 
+@app.post("/backtest_strategy/")
+async def backtest_strategy(params: dict):
+    """
+    运行价差信号回测
+    
+    参数:
+    - params: 回测参数字典
+        - code_a: 资产A代码
+        - code_b: 资产B代码
+        - start_date: 开始日期
+        - end_date: 结束日期
+        - initial_capital: 初始资金
+        - position_size_type: 仓位计算方式 ('fixed'/'percent')
+        - position_size: 仓位大小
+        - entry_threshold: 入场阈值
+        - exit_threshold: 出场阈值
+        - stop_loss: 止损比例
+        - take_profit: 止盈比例
+        - max_positions: 最大持仓数量
+        - trading_fee: 交易费率
+    
+    返回:
+    - 回测结果对象
+    """
+    try:
+        # 创建回测引擎实例
+        engine = BacktestEngine()
+        
+        # 运行回测并返回结果
+        result = engine.run_price_ratio_backtest(params)
+        return result
+    except Exception as e:
+        return {"error": f"回测执行过程中发生错误: {str(e)}"}
 
 
 if __name__ == "__main__":

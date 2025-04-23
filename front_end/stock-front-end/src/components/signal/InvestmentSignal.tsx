@@ -5,6 +5,7 @@ import SignalList from './SignalList';
 import SignalDetail from './SignalDetail';
 import CurrentPositionAnalysis from './CurrentPositionAnalysis';
 import SignalFilterBar from './SignalFilterBar';
+import BacktestSystem from './BacktestSystem';
 import { SearchOutlined } from '@ant-design/icons';
 import axios from 'axios';
 
@@ -289,6 +290,13 @@ const InvestmentSignal: React.FC = () => {
                   <TabPane tab="当前位置分析" key="2">
                     <CurrentPositionAnalysis 
                       currentPositionInfo={currentPositionInfo}
+                      signals={safeSignals}
+                    />
+                  </TabPane>
+                  <TabPane tab="策略回测" key="3">
+                    <BacktestSystem 
+                      codeA={selectedStockA}
+                      codeB={selectedStockB}
                       signals={safeSignals}
                     />
                   </TabPane>
