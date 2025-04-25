@@ -6,6 +6,7 @@ import SignalDetail from './SignalDetail';
 import CurrentPositionAnalysis from './CurrentPositionAnalysis';
 import SignalFilterBar from './SignalFilterBar';
 import BacktestSystem from './BacktestSystem';
+import SignalStatsCard from './SignalStatsCard';
 import { SearchOutlined } from '@ant-design/icons';
 import axios from 'axios';
 
@@ -23,6 +24,8 @@ export interface Signal {
   strength: 'weak' | 'medium' | 'strong';
   description: string;
   recommendation: string;
+  quality_evaluation?: any; // 添加质量评分字段
+  record_id?: number; // 添加记录ID字段
 }
 
 // 股票信息接口
@@ -42,6 +45,9 @@ const InvestmentSignal: React.FC = () => {
   const [degree, setDegree] = useLocalStorage<number>('signal-analysis-degree', 3);
   const [thresholdArg, setThresholdArg] = useLocalStorage<number>('signal-analysis-threshold', 2.0);
   
+  // 添加追踪信号开关
+  const [trackSignals, setTrackSignals] = useLocalStorage<boolean>('track-signals', true);
+  
   // 股票搜索相关状态
   const [stockAOptions, setStockAOptions] = useState<StockInfo[]>([]);
   const [stockBOptions, setStockBOptions] = useState<StockInfo[]>([]);
@@ -55,6 +61,9 @@ const InvestmentSignal: React.FC = () => {
   const [selectedSignal, setSelectedSignal] = useState<Signal | null>(null);
   const [currentPositionInfo, setCurrentPositionInfo] = useState<any>(null);
   const [loading, setLoading] = useState<boolean>(false);
+  
+  // 页面布局状态
+  const [activeMainTab, setActiveMainTab] = useLocalStorage<string>('signal-main-tab', '1');
   
   // 过滤条件 - 始终使用数组初始化
   const [signalStrength, setSignalStrength] = useLocalStorage<string[]>('signalStrength', ['weak', 'medium', 'strong']);
@@ -75,7 +84,7 @@ const InvestmentSignal: React.FC = () => {
     if (selectedStockA && selectedStockB) {
       fetchSignals();
     }
-  }, [selectedStockA, selectedStockB, selectedDuration, degree, thresholdArg]);
+  }, [selectedStockA, selectedStockB, selectedDuration, degree, thresholdArg, trackSignals]);
   
   // 获取信号数据
   const fetchSignals = async () => {
@@ -96,7 +105,8 @@ const InvestmentSignal: React.FC = () => {
           code_b: selectedStockB,
           duration: selectedDuration,
           degree: degree,
-          threshold_arg: thresholdArg
+          threshold_arg: thresholdArg,
+          track_signals: trackSignals
         }),
       });
       
@@ -127,6 +137,12 @@ const InvestmentSignal: React.FC = () => {
           data.current_position.deviation_from_trend = data.current_position.deviation_from_trend || null;
           data.current_position.volatility_level = data.current_position.volatility_level || null;
           data.current_position.historical_signal_pattern = data.current_position.historical_signal_pattern || null;
+          
+          // 确保新增的分析字段存在
+          data.current_position.trend_strength = data.current_position.trend_strength || null;
+          data.current_position.support_resistance = data.current_position.support_resistance || null;
+          data.current_position.mean_reversion_probability = data.current_position.mean_reversion_probability || null;
+          data.current_position.cycle_position = data.current_position.cycle_position || null;
           
           setCurrentPositionInfo(data.current_position);
         } else {
@@ -266,71 +282,72 @@ const InvestmentSignal: React.FC = () => {
             </Row>
           </Card>
           
-          {(!selectedStockA || !selectedStockB) && (
-            <Alert
-              message="请先选择股票"
-              description="请使用上方的搜索框选择两只股票后查看投资信号。"
-              type="info"
-              showIcon
-            />
+          {/* 参数设置和过滤器 */}
+          <SignalFilterBar
+            duration={selectedDuration}
+            onDurationChange={setSelectedDuration}
+            degree={degree}
+            onDegreeChange={setDegree}
+            threshold={thresholdArg}
+            onThresholdChange={setThresholdArg}
+            trackSignals={trackSignals}
+            onTrackSignalsChange={setTrackSignals}
+            signalStrength={signalStrength}
+            onSignalStrengthChange={setSignalStrength}
+            signalType={signalType}
+            onSignalTypeChange={setSignalType}
+          />
+          
+          {loading && (
+            <div style={{ textAlign: 'center', padding: '20px 0' }}>
+              <Spin />
+              <div style={{ marginTop: 8 }}>加载信号数据...</div>
+            </div>
           )}
           
-          {selectedStockA && selectedStockB && (
-            <>
-              <div className="signal-header">
-                <Title level={4}>
-                  {`${selectedStockA}/${selectedStockB} 投资信号分析`}
-                </Title>
-                <Text type="secondary">
-                  基于历史价格比值异常检测生成的投资信号
-                </Text>
-              </div>
-              
-              <SignalFilterBar
-                signalStrength={signalStrength}
-                setSignalStrength={setSignalStrength}
-                signalType={signalType}
-                setSignalType={setSignalType}
-                selectedDuration={selectedDuration}
-                setSelectedDuration={setSelectedDuration}
-                degree={degree}
-                setDegree={setDegree}
-                thresholdArg={thresholdArg}
-                setThresholdArg={setThresholdArg}
+          {/* 主体内容区域 */}
+          <Tabs activeKey={activeMainTab} onChange={setActiveMainTab}>
+            <TabPane tab="信号列表" key="1">
+              <Row gutter={16}>
+                <Col span={12}>
+                  <SignalList 
+                    signals={filteredSignals} 
+                    selectedSignal={selectedSignal} 
+                    onSignalSelect={handleSignalSelect} 
+                  />
+                </Col>
+                <Col span={12}>
+                  {selectedSignal ? (
+                    <SignalDetail signal={selectedSignal} />
+                  ) : (
+                    <Card>
+                      <div style={{ textAlign: 'center', padding: '40px 0' }}>
+                        <Text type="secondary">请从左侧列表选择一个信号查看详情</Text>
+                      </div>
+                    </Card>
+                  )}
+                </Col>
+              </Row>
+            </TabPane>
+            
+            <TabPane tab="当前市场分析" key="2">
+              <CurrentPositionAnalysis 
+                currentPosition={currentPositionInfo} 
+                loading={loading} 
               />
-              
-              <Spin spinning={loading}>
-                <Tabs defaultActiveKey="1">
-                  <TabPane tab="信号列表" key="1">
-                    <Space direction="vertical" style={{ width: '100%' }}>
-                      <SignalList 
-                        signals={filteredSignals} 
-                        selectedSignal={selectedSignal}
-                        onSignalSelect={handleSignalSelect}
-                      />
-                      
-                      {selectedSignal && (
-                        <SignalDetail signal={selectedSignal} />
-                      )}
-                    </Space>
-                  </TabPane>
-                  <TabPane tab="当前位置分析" key="2">
-                    <CurrentPositionAnalysis 
-                      currentPositionInfo={currentPositionInfo}
-                      signals={safeSignals}
-                    />
-                  </TabPane>
-                  <TabPane tab="策略回测" key="3">
-                    <BacktestSystem 
-                      codeA={selectedStockA}
-                      codeB={selectedStockB}
-                      signals={safeSignals}
-                    />
-                  </TabPane>
-                </Tabs>
-              </Spin>
-            </>
-          )}
+            </TabPane>
+            
+            <TabPane tab="信号统计" key="3">
+              <SignalStatsCard />
+            </TabPane>
+            
+            <TabPane tab="回测系统" key="4">
+              <BacktestSystem 
+                stockA={selectedStockA} 
+                stockB={selectedStockB} 
+              />
+            </TabPane>
+          </Tabs>
         </Space>
       </Card>
     </div>

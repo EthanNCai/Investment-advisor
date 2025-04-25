@@ -1,7 +1,8 @@
 import React from 'react';
 import { Table, Tag, Space } from 'antd';
-import { ArrowUpOutlined, ArrowDownOutlined } from '@ant-design/icons';
+import { ArrowUpOutlined, ArrowDownOutlined, StarOutlined, StarFilled } from '@ant-design/icons';
 import { Signal } from './InvestmentSignal';
+import { SignalQualityEvaluation } from './SignalQualityCard';
 
 interface SignalListProps {
   signals: Signal[];
@@ -29,18 +30,37 @@ const SignalList: React.FC<SignalListProps> = ({ signals, selectedSignal, onSign
     }
   };
   
+  const getQualityColor = (quality: SignalQualityEvaluation) => {
+    if (!quality) return '';
+    const score = quality.quality_score;
+    if (score >= 80) return 'success';
+    if (score >= 60) return 'warning';
+    return 'error';
+  };
+  
+  const getQualityTag = (signal: Signal) => {
+    const quality = signal.quality_evaluation as SignalQualityEvaluation;
+    if (!quality) return null;
+    
+    return (
+      <Tag color={getQualityColor(quality)}>
+        {quality.quality_score.toFixed(0)}分
+      </Tag>
+    );
+  };
+  
   const columns = [
     {
       title: '日期',
       dataIndex: 'date',
       key: 'date',
-      width: 120,
+      width: 100,
     },
     {
-      title: '信号类型',
+      title: '类型',
       dataIndex: 'type',
       key: 'type',
-      width: 120,
+      width: 90,
       render: (type: string) => (
         <Space>
           {type === 'positive' ? 
@@ -51,10 +71,10 @@ const SignalList: React.FC<SignalListProps> = ({ signals, selectedSignal, onSign
       ),
     },
     {
-      title: '信号强度',
+      title: '强度',
       dataIndex: 'strength',
       key: 'strength',
-      width: 100,
+      width: 70,
       render: (strength: string) => (
         <Tag color={getStrengthColor(strength)}>
           {getStrengthText(strength)}
@@ -62,21 +82,20 @@ const SignalList: React.FC<SignalListProps> = ({ signals, selectedSignal, onSign
       ),
     },
     {
-      title: '比值',
-      dataIndex: 'ratio',
-      key: 'ratio',
-      width: 100,
-      render: (ratio: number) => ratio.toFixed(4),
-    },
-    {
       title: 'Z值',
       dataIndex: 'z_score',
       key: 'z_score',
-      width: 80,
+      width: 60,
       render: (z_score: number) => Math.abs(z_score).toFixed(2),
     },
     {
-      title: '简要描述',
+      title: '质量',
+      key: 'quality',
+      width: 70,
+      render: (text: any, record: Signal) => getQualityTag(record),
+    },
+    {
+      title: '信号说明',
       dataIndex: 'description',
       key: 'description',
       ellipsis: true,

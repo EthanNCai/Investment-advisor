@@ -82,11 +82,11 @@ def generate_investment_signals(
             recommendation = "考虑买入股票A或卖出股票B进行获利。"
 
         signals.append({
-            "id": signal_id,
+            "id": int(signal_id),
             "date": signal_date,
-            "ratio": signal_ratio,
-            "z_score": z_score,
-            "z_score_mark": anomaly["z_score_mark"],
+            "ratio": float(signal_ratio),
+            "z_score": float(z_score),
+            "z_score_mark": float(anomaly["z_score_mark"]),
             "type": signal_type,
             "strength": strength,
             "description": description,
@@ -140,7 +140,7 @@ def analyze_current_position(
 ) -> Dict[str, Any]:
     """
     分析当前价格比值位置
-
+    
     参数:
         code_a: 股票A代码
         code_b: 股票B代码
@@ -164,6 +164,10 @@ def analyze_current_position(
         - z_score: 当前比值的Z得分
         - historical_signal_pattern: 历史信号模式分析
         - recommendation: 综合推荐建议
+        - trend_strength: 趋势强度
+        - support_resistance: 支撑和阻力位
+        - mean_reversion_probability: 均值回归概率
+        - cycle_position: 在周期中的位置
     """
     # 计算价格比值
     ratio = [float(a) / float(b) for a, b in zip(close_a, close_b)]
@@ -187,6 +191,10 @@ def analyze_current_position(
             "is_extreme": False,
             "z_score": None,
             "historical_signal_pattern": None,
+            "trend_strength": None,
+            "support_resistance": None,
+            "mean_reversion_probability": None,
+            "cycle_position": None,
             "recommendation": "无法获取最新数据，请稍后再试。"
         }
 
@@ -219,12 +227,18 @@ def analyze_current_position(
         # 计算最近30个交易日的波动率
         recent_ratios = ratio[-30:]
         recent_volatility = np.std(recent_ratios) / np.mean(recent_ratios)
+        # 计算较长期的波动率（如90天）作为比较基准
+        long_term_ratios = ratio[-min(90, len(ratio)):]
+        long_term_volatility = np.std(long_term_ratios) / np.mean(long_term_ratios)
+        
+        # 比较近期波动率与长期波动率
+        relative_volatility = recent_volatility / long_term_volatility if long_term_volatility else 1.0
 
     volatility_level = None
     if recent_volatility is not None:
-        if recent_volatility < 0.05:
+        if recent_volatility < 0.035:
             volatility_level = "low"
-        elif recent_volatility < 0.10:
+        elif recent_volatility < 0.08:
             volatility_level = "medium"
         else:
             volatility_level = "high"
@@ -369,25 +383,212 @@ def analyze_current_position(
             historical_signal_pattern = "震荡切换"
         else:
             historical_signal_pattern = "混合模式"
+    
+    # 10. 新增：计算趋势强度
+    trend_strength = None
+    if len(fitting_line) >= 2:
+        # 使用拟合线的斜率计算趋势强度
+        recent_window = min(30, len(fitting_line))
+        recent_fit = fitting_line[-recent_window:]
+        
+        if recent_window >= 2:
+            trend_slope = (recent_fit[-1] - recent_fit[0]) / (recent_window - 1)
+            trend_norm = abs(trend_slope) / mean_ratio  # 标准化斜率
+            
+            # 根据标准化斜率确定趋势强度
+            if trend_norm < 0.001:  # 几乎没有趋势
+                trend_strength = {
+                    "value": round(float(trend_norm * 100), 3),
+                    "level": "无明显趋势",
+                    "direction": "平稳"
+                }
+            elif trend_norm < 0.003:  # 弱趋势
+                trend_strength = {
+                    "value": round(float(trend_norm * 100), 3),
+                    "level": "弱趋势",
+                    "direction": "上升" if trend_slope > 0 else "下降"
+                }
+            elif trend_norm < 0.008:  # 中等趋势
+                trend_strength = {
+                    "value": round(float(trend_norm * 100), 3),
+                    "level": "中等趋势",
+                    "direction": "上升" if trend_slope > 0 else "下降"
+                }
+            else:  # 强趋势
+                trend_strength = {
+                    "value": round(float(trend_norm * 100), 3),
+                    "level": "强趋势",
+                    "direction": "上升" if trend_slope > 0 else "下降"
+                }
+    
+    # 11. 新增：计算支撑位和阻力位
+    support_resistance = None
+    if len(ratio) >= 30:
+        # 使用历史价格分布识别支撑位和阻力位
+        sorted_ratios = sorted(ratio)
+        q1 = np.percentile(sorted_ratios, 25)  # 第一四分位数作为强支撑位
+        q3 = np.percentile(sorted_ratios, 75)  # 第三四分位数作为强阻力位
+        
+        # 找出最近的局部最低点作为近期支撑
+        recent_window = min(60, len(ratio))
+        recent_ratios = ratio[-recent_window:]
+        
+        # 计算局部最小值和最大值（至少间隔5个点）
+        local_mins = []
+        local_maxs = []
+        for i in range(5, len(recent_ratios) - 5):
+            if recent_ratios[i] == min(recent_ratios[i-5:i+6]):
+                local_mins.append(recent_ratios[i])
+            if recent_ratios[i] == max(recent_ratios[i-5:i+6]):
+                local_maxs.append(recent_ratios[i])
+        
+        # 找出当前比值最近的支撑位和阻力位
+        nearby_support = None
+        nearby_resistance = None
+        
+        if local_mins:
+            # 找出低于当前比值的最高支撑位
+            lower_supports = [r for r in local_mins if r < current_ratio]
+            if lower_supports:
+                nearby_support = max(lower_supports)
+        
+        if local_maxs:
+            # 找出高于当前比值的最低阻力位
+            higher_resistances = [r for r in local_maxs if r > current_ratio]
+            if higher_resistances:
+                nearby_resistance = min(higher_resistances)
+        
+        # 如果没有找到本地支撑/阻力位，使用统计分布
+        if nearby_support is None:
+            nearby_support = q1
+        if nearby_resistance is None:
+            nearby_resistance = q3
+            
+        support_resistance = {
+            "strong_support": round(float(q1), 3),
+            "nearby_support": round(float(nearby_support), 3),
+            "nearby_resistance": round(float(nearby_resistance), 3),
+            "strong_resistance": round(float(q3), 3)
+        }
+    
+    # 12. 新增：计算均值回归概率
+    mean_reversion_probability = None
+    if current_z_score is not None:
+        # 根据Z分数计算均值回归概率
+        # Z分数越高，均值回归概率越大
+        if abs(current_z_score) > 2.5:
+            prob = 0.85  # 极端偏离，高概率回归
+        elif abs(current_z_score) > 1.8:
+            prob = 0.7   # 显著偏离，较高概率回归
+        elif abs(current_z_score) > 1.0:
+            prob = 0.55  # 中等偏离，中等概率回归
+        else:
+            prob = 0.3   # 轻微偏离，低概率回归
+            
+        # 考虑趋势因素调整概率
+        if trend_strength and trend_strength["level"] != "无明显趋势":
+            trend_factor = 0.2 if trend_strength["level"] == "强趋势" else 0.1
+            
+            # 如果偏离方向与趋势方向一致，降低回归概率；反之则提高
+            if (current_z_score > 0 and trend_strength["direction"] == "上升") or \
+               (current_z_score < 0 and trend_strength["direction"] == "下降"):
+                prob -= trend_factor
+            else:
+                prob += trend_factor
+        
+        # 确保概率在有效范围内
+        mean_reversion_probability = max(0.1, min(0.95, prob))
+    
+    # 13. 新增：分析在周期中的位置
+    cycle_position = None
+    if percentile is not None and trend_strength:
+        if percentile > 0.85:
+            position = "顶部区域"
+        elif percentile > 0.65:
+            position = "上升区域"
+        elif percentile > 0.35:
+            position = "中间区域"
+        elif percentile > 0.15:
+            position = "下降区域"
+        else:
+            position = "底部区域"
+            
+        # 结合趋势方向
+        if trend_strength["direction"] == "上升":
+            if position in ["底部区域", "下降区域"]:
+                cycle_status = "可能开始新一轮上升周期"
+            elif position in ["中间区域"]:
+                cycle_status = "处于上升周期中段"
+            else:
+                cycle_status = "上升周期接近尾声"
+        elif trend_strength["direction"] == "下降":
+            if position in ["顶部区域", "上升区域"]:
+                cycle_status = "可能开始新一轮下降周期" 
+            elif position in ["中间区域"]:
+                cycle_status = "处于下降周期中段"
+            else:
+                cycle_status = "下降周期接近尾声"
+        else:
+            cycle_status = "当前处于盘整阶段"
+            
+        cycle_position = {
+            "position": position,
+            "status": cycle_status
+        }
 
-    # 10. 生成综合推荐建议
+    # 14. 生成综合推荐建议（增强版）
     recommendation = ""
 
     # 基于当前Z分数的极端值判断
     if is_extreme and current_z_score is not None:
         if current_z_score > 0:
             recommendation = f"当前比值处于历史高位(Z值:{current_z_score:.2f})，建议关注做空套利机会（卖出股票A或买入股票B）。"
+            
+            # 添加均值回归概率信息
+            if mean_reversion_probability:
+                recommendation += f" 均值回归概率约为{mean_reversion_probability:.0%}。"
+                
+            # 添加支撑位信息
+            if support_resistance:
+                recommendation += f" 注意防守{support_resistance['nearby_support']}的支撑位。"
         else:
             recommendation = f"当前比值处于历史低位(Z值:{current_z_score:.2f})，建议关注做多套利机会（买入股票A或卖出股票B）。"
+            
+            # 添加均值回归概率信息
+            if mean_reversion_probability:
+                recommendation += f" 均值回归概率约为{mean_reversion_probability:.0%}。"
+                
+            # 添加阻力位信息
+            if support_resistance:
+                recommendation += f" 上方{support_resistance['nearby_resistance']}可能存在阻力。"
 
     # 考虑趋势与当前位置的综合分析
-    elif trend_direction is not None and deviation_from_trend is not None:
-        if trend_direction > 0 and deviation_from_trend < -5:
-            recommendation = "当前比值低于上升趋势线，可能存在回归机会。考虑买入股票A或卖出股票B。"
-        elif trend_direction < 0 and deviation_from_trend > 5:
-            recommendation = "当前比值高于下降趋势线，可能存在回归机会。考虑卖出股票A或买入股票B。"
-        elif abs(deviation_from_trend) < 3:
-            recommendation = "当前比值贴近趋势线，建议观望或继续跟踪趋势发展。"
+    elif trend_strength and trend_strength["level"] != "无明显趋势":
+        if trend_strength["direction"] == "上升" and deviation_from_trend and deviation_from_trend < -5:
+            recommendation = f"当前比值低于上升趋势线，可能存在回归机会。考虑买入股票A或卖出股票B。价格比值处于{percentile:.0%}百分位水平。"
+            
+            # 添加支撑阻力位信息
+            if support_resistance:
+                recommendation += f" 近期支撑位:{support_resistance['nearby_support']}，阻力位:{support_resistance['nearby_resistance']}。"
+        elif trend_strength["direction"] == "下降" and deviation_from_trend and deviation_from_trend > 5:
+            recommendation = f"当前比值高于下降趋势线，可能存在回归机会。考虑卖出股票A或买入股票B。价格比值处于{percentile:.0%}百分位水平。"
+            
+            # 添加支撑阻力位信息
+            if support_resistance:
+                recommendation += f" 近期支撑位:{support_resistance['nearby_support']}，阻力位:{support_resistance['nearby_resistance']}。"
+        elif abs(deviation_from_trend or 0) < 3:
+            recommendation = f"当前比值贴近{trend_strength['level']}的{trend_strength['direction']}趋势线，建议顺势操作或观望。"
+            
+            # 添加周期位置信息
+            if cycle_position:
+                recommendation += f" {cycle_position['status']}。"
+        else:
+            recommendation = f"当前处于{trend_strength['level']}的{trend_strength['direction']}趋势中，"
+            
+            if trend_strength["direction"] == "上升":
+                recommendation += f"整体偏多操作为宜。价格比值处于{percentile:.0%}百分位水平。"
+            else:
+                recommendation += f"整体偏空操作为宜。价格比值处于{percentile:.0%}百分位水平。"
 
     # 与历史信号的比较分析
     elif similarity_score and similarity_score > 0.8 and nearest_signal_id is not None:
@@ -395,24 +596,69 @@ def analyze_current_position(
         if nearest_signal:
             signal_desc = "超买" if nearest_signal["type"] == "positive" else "超卖"
             strength_desc = {"weak": "弱", "medium": "中等", "strong": "强"}[nearest_signal["strength"]]
-            recommendation = f"当前比值与历史{nearest_signal['date']}的{signal_desc}信号高度相似(相似度:{similarity_score:.2f})，当时为{strength_desc}信号。请参考该信号后续的市场表现。"
+            recommendation = f"当前比值与历史{nearest_signal['date']}的{signal_desc}信号高度相似(相似度:{similarity_score:.2f})，当时为{strength_desc}信号。参考历史表现，"
+            
+            # 检查该信号的历史表现
+            similar_signal_record = None
+            for signal in signals:
+                if signal["id"] == nearest_signal_id and "record_id" in signal:
+                    # 可能需要加载信号记录来获取更详细的历史表现
+                    # 这里可以简化为直接使用当前信号的类型来推断
+                    if signal["type"] == "positive":
+                        recommendation += "可能面临价格回落。建议卖出股票A或买入股票B。"
+                    else:
+                        recommendation += "可能面临价格反弹。建议买入股票A或卖出股票B。"
+                    break
+            
+            # 如果无法获取历史表现，给出通用建议
+            if "可能面临" not in recommendation:
+                recommendation += "注意关注后续价格走势的相似性。"
 
     # 考虑历史模式
     elif historical_signal_pattern:
         if historical_signal_pattern == "连续超买" and percentile and percentile > 0.7:
             recommendation = "近期历史信号显示连续超买状态，当前比值位于较高位置，建议保持谨慎。"
+            
+            # 添加支撑位信息
+            if support_resistance:
+                recommendation += f" 若跌破{support_resistance['nearby_support']}支撑位，可能加速下跌。"
         elif historical_signal_pattern == "连续超卖" and percentile and percentile < 0.3:
             recommendation = "近期历史信号显示连续超卖状态，当前比值位于较低位置，可能存在机会。"
+            
+            # 添加阻力位信息
+            if support_resistance:
+                recommendation += f" 突破{support_resistance['nearby_resistance']}阻力位后，可能加速上涨。"
         elif historical_signal_pattern == "震荡切换":
             recommendation = "近期市场处于震荡状态，建议关注价格比值突破重要阈值的情况。"
+            
+            # 添加支撑阻力区间
+            if support_resistance:
+                recommendation += f" 当前交易区间可能在{support_resistance['nearby_support']}至{support_resistance['nearby_resistance']}之间。"
 
-    # 没有明显信号时的建议
+    # 没有明显信号时，基于周期位置和支撑阻力给出建议
+    elif cycle_position:
+        recommendation = f"当前比值在历史分布中处于{cycle_position['position']}，{cycle_position['status']}。"
+        
+        if support_resistance:
+            recommendation += f" 近期支撑位:{support_resistance['nearby_support']}，阻力位:{support_resistance['nearby_resistance']}。"
+            
+        # 添加百分位信息
+        if percentile is not None:
+            recommendation += f" 价格比值处于{percentile:.0%}百分位水平。"
+    
+    # 最后的兜底建议
     else:
-        recommendation = "当前比值在历史正常范围内，暂无明显异常。"
+        recommendation = "当前比值在历史正常范围内，暂无明显异常。建议继续观察市场动态。"
+        
+        # 添加百分位信息
+        if percentile is not None:
+            recommendation += f" 价格比值处于{percentile:.0%}百分位水平。"
 
     # 添加波动性提示
     if volatility_level == "high":
         recommendation += " 注意：当前波动性较高，交易需谨慎。"
+    elif volatility_level == "low" and trend_strength and trend_strength["level"] != "无明显趋势":
+        recommendation += f" 当前波动性较低，可能即将迎来波动性扩大，注意{trend_strength['direction']}趋势延续性。"
 
     return {
         "current_ratio": float(current_ratio) if current_ratio is not None else 0,
@@ -421,9 +667,13 @@ def analyze_current_position(
         "percentile": float(percentile) if percentile is not None else None,
         "deviation_from_trend": float(deviation_from_trend) if deviation_from_trend is not None else None,
         "volatility_level": volatility_level,
-        "is_extreme": is_extreme,
+        "is_extreme": bool(is_extreme),
         "z_score": float(current_z_score) if current_z_score is not None else None,
         "historical_signal_pattern": historical_signal_pattern,
+        "trend_strength": trend_strength,
+        "support_resistance": support_resistance,
+        "mean_reversion_probability": float(mean_reversion_probability) if mean_reversion_probability is not None else None,
+        "cycle_position": cycle_position,
         "recommendation": recommendation
     }
 

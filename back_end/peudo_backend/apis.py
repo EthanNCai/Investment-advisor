@@ -14,7 +14,7 @@ from get_stock_data.auto_update_trends import start_auto_update_services
 from get_stock_data.get_stock_trends_data import StockTrendsData
 from get_stock_data.stock_data_base import StockKlineDatabase
 from get_stock_data.stock_trends_base import StockTrendsDatabase
-from indicators.investment_signals import generate_investment_signals, analyze_current_position
+from indicators.investment_signals import generate_investment_signals, analyze_current_position, get_latest_price_ratio
 from indicators.technical_indicators import calculate_indicators, calculate_price_ratio_anomaly
 from k_chart_fetcher import k_chart_fetcher, durations, get_stock_data_pair, date_alignment
 from kline_processor.processor import process_kline_by_type
@@ -24,6 +24,14 @@ from prediction import get_predictor
 from stock_search.searcher import score_match, is_stock_code_format, fetch_stock_from_api
 # 导入回测引擎
 from backtest.backtest_strategy import BacktestEngine
+# 导入新增的信号评估模块
+from indicators.signal_evaluator import (
+    evaluate_signal_quality,
+    record_new_signal,
+    update_signal_performance,
+    get_signal_performance_stats,
+    get_signal_history
+)
 
 app = FastAPI()
 
@@ -572,6 +580,7 @@ class SignalRequestModel(BaseModel):
     duration: str
     degree: int = 3
     threshold_arg: float = 2.0
+    track_signals: bool = True  # 是否跟踪记录信号
 
 
 class SignalModel(BaseModel):
@@ -596,6 +605,7 @@ async def get_investment_signals(request: SignalRequestModel):
         duration: 时间跨度 (1m, 1q, 1y, 2y, 5y, maximum)
         degree: 多项式拟合的次数
         threshold_arg: 阈值系数
+        track_signals: 是否跟踪记录信号
 
     返回:
         包含信号列表和当前位置分析的响应对象
@@ -628,12 +638,6 @@ async def get_investment_signals(request: SignalRequestModel):
         trends_a = db.query_trends(stock_code=request.code_a)
         trends_b = db.query_trends(stock_code=request.code_b)
 
-        # # 如果没有当前趋势数据，尝试获取
-        # if not trends_a:
-        #     trends_a = get_stock_trends(request.code_a)
-        # if not trends_b:
-        #     trends_b = get_stock_trends(request.code_b)
-
         # 4. 分析当前位置
         current_position = analyze_current_position(
             request.code_a,
@@ -647,36 +651,117 @@ async def get_investment_signals(request: SignalRequestModel):
             request.degree
         )
 
-        # 确保所有numpy类型都转换为Python原生类型
+        # 5. 添加信号质量评分
         for signal in signals:
-            for key, value in signal.items():
-                if isinstance(value, (np.integer, np.floating, np.bool_)):
-                    if isinstance(value, np.bool_):
-                        signal[key] = bool(value)
-                    elif isinstance(value, np.integer):
-                        signal[key] = int(value)
-                    elif isinstance(value, np.floating):
-                        signal[key] = float(value)
+            # 为每个信号计算质量评分
+            quality_evaluation = evaluate_signal_quality(
+                signal,
+                request.code_a,
+                request.code_b
+            )
+            signal["quality_evaluation"] = quality_evaluation
 
-        # 确保current_position中的所有numpy类型都转换为Python原生类型
-        for key, value in current_position.items():
-            if isinstance(value, (np.integer, np.floating, np.bool_)):
-                if isinstance(value, np.bool_):
-                    current_position[key] = bool(value)
-                elif isinstance(value, np.integer):
-                    current_position[key] = int(value)
-                elif isinstance(value, np.floating):
-                    current_position[key] = float(value)
+            # 如果开启跟踪，记录新信号
+            if request.track_signals:
+                record = record_new_signal(
+                    signal,
+                    request.code_a,
+                    request.code_b,
+                    quality_evaluation
+                )
+                signal["record_id"] = record["record_id"]
+
+            # 更新信号表现数据（如果已有记录）
+            update_signal_performance(
+                signal.get("record_id", 0),
+                close_a,
+                close_b,
+                dates
+            )
+        
+        # 确保所有数据都是Python原生类型，防止NumPy类型序列化问题
+        def ensure_native_types(obj):
+            if isinstance(obj, dict):
+                return {k: ensure_native_types(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [ensure_native_types(item) for item in obj]
+            elif hasattr(obj, 'item'):  # NumPy类型有.item()方法
+                return obj.item()
+            elif hasattr(obj, 'tolist'):  # NumPy数组
+                return obj.tolist()
+            else:
+                return obj
+        
+        # 应用类型转换
+        signals = ensure_native_types(signals)
+        current_position = ensure_native_types(current_position)
 
         return {
             "signals": signals,
             "current_position": current_position
         }
-
     except Exception as e:
-        print(f"获取投资信号失败: {str(e)}")
+        print(f"获取投资信号时出错: {e}")
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"获取投资信号失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
+@app.get("/signal_history/{code_a}/{code_b}")
+async def get_signals_history(code_a: str, code_b: str, limit: int = 50, include_followup: bool = False):
+    """
+    获取指定股票对的信号历史记录
+    
+    参数:
+        code_a: 股票A代码
+        code_b: 股票B代码
+        limit: 返回记录数量限制
+        include_followup: 是否包含详细跟踪数据
+        
+    返回:
+        信号历史记录列表
+    """
+    try:
+        records = get_signal_history(code_a, code_b, limit, include_followup)
+        return {"records": records}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/signal_performance_stats/")
+async def get_signals_performance_stats():
+    """
+    获取信号表现统计数据
+    
+    返回:
+        信号表现统计报告
+    """
+    try:
+        stats = get_signal_performance_stats()
+        return stats
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/signal_tracking/{record_id}")
+async def get_signal_tracking(record_id: int):
+    """
+    获取单个信号的跟踪数据
+    
+    参数:
+        record_id: 信号记录ID
+        
+    返回:
+        信号记录详情，包含跟踪数据
+    """
+    try:
+        records = get_signal_history(limit=999, include_followup=True)
+        for record in records:
+            if record["record_id"] == record_id:
+                return record
+        raise HTTPException(status_code=404, detail="信号记录不存在")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/backtest_strategy/")
@@ -782,7 +867,7 @@ if __name__ == "__main__":
     import uvicorn
 
     # 启动自动更新服务
-    update_threads = start_auto_update_services()
+    # update_threads = start_auto_update_services()
 
     # 启动API服务
     uvicorn.run(app, host="localhost", port=8000)

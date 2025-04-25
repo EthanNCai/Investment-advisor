@@ -1,15 +1,20 @@
-import React from 'react';
-import { Card, Descriptions, Tag, Space, Typography, Divider } from 'antd';
+import React, { useState } from 'react';
+import { Card, Descriptions, Tag, Space, Typography, Divider, Tabs } from 'antd';
 import { ArrowUpOutlined, ArrowDownOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import { Signal } from './InvestmentSignal';
+import SignalQualityCard from './SignalQualityCard';
+import SignalTrackingCard from './SignalTrackingCard';
 
 const { Text, Paragraph } = Typography;
+const { TabPane } = Tabs;
 
 interface SignalDetailProps {
   signal: Signal;
 }
 
 const SignalDetail: React.FC<SignalDetailProps> = ({ signal }) => {
+  const [activeTab, setActiveTab] = useState<string>('1');
+  
   if (!signal) {
     return null;
   }
@@ -50,20 +55,32 @@ const SignalDetail: React.FC<SignalDetailProps> = ({ signal }) => {
       bordered={false}
       className="signal-detail-card"
     >
-      <Descriptions bordered size="small" column={2}>
-        <Descriptions.Item label="日期">{signal.date}</Descriptions.Item>
-        <Descriptions.Item label="价格比值">{signal.ratio.toFixed(4)}</Descriptions.Item>
-        <Descriptions.Item label="Z值">{signal.z_score.toFixed(2)}</Descriptions.Item>
-        <Descriptions.Item label="信号强度">{getStrengthText(signal.strength)}</Descriptions.Item>
-      </Descriptions>
-      
-      <Divider orientation="left">信号分析</Divider>
-      <Paragraph>{signal.description}</Paragraph>
-      
-      <Divider orientation="left">投资建议</Divider>
-      <Paragraph>
-        <Text strong>{signal.recommendation}</Text>
-      </Paragraph>
+      <Tabs activeKey={activeTab} onChange={setActiveTab}>
+        <TabPane tab="基本信息" key="1">
+          <Descriptions bordered size="small" column={2}>
+            <Descriptions.Item label="日期">{signal.date}</Descriptions.Item>
+            <Descriptions.Item label="价格比值">{signal.ratio.toFixed(4)}</Descriptions.Item>
+            <Descriptions.Item label="Z值">{signal.z_score.toFixed(2)}</Descriptions.Item>
+            <Descriptions.Item label="信号强度">{getStrengthText(signal.strength)}</Descriptions.Item>
+          </Descriptions>
+          
+          <Divider orientation="left">信号分析</Divider>
+          <Paragraph>{signal.description}</Paragraph>
+          
+          <Divider orientation="left">投资建议</Divider>
+          <Paragraph>
+            <Text strong>{signal.recommendation}</Text>
+          </Paragraph>
+        </TabPane>
+        
+        <TabPane tab="质量评分" key="2">
+          <SignalQualityCard signal={signal} />
+        </TabPane>
+        
+        <TabPane tab="信号追踪" key="3">
+          <SignalTrackingCard signal={signal} />
+        </TabPane>
+      </Tabs>
     </Card>
   );
 };

@@ -1,720 +1,294 @@
 import React from 'react';
-import { Card, Alert, Descriptions, Progress, Space, Typography, Divider, Row, Col, Statistic, Tag, Table, Empty } from 'antd';
-import { InfoCircleOutlined, WarningOutlined, CheckCircleOutlined, ArrowUpOutlined, ArrowDownOutlined } from '@ant-design/icons';
-import ReactECharts from 'echarts-for-react';
-import { Signal } from './InvestmentSignal';
+import { Card, Row, Col, Typography, Statistic, Divider, Tag, Space, Empty, Spin } from 'antd';
+import { ArrowUpOutlined, ArrowDownOutlined, InfoCircleOutlined, LineChartOutlined, AreaChartOutlined, NodeIndexOutlined } from '@ant-design/icons';
 
-const { Text, Paragraph, Title } = Typography;
+const { Title, Text, Paragraph } = Typography;
 
 interface CurrentPositionProps {
-  currentPositionInfo: any | null;
-  signals: Signal[];
+  currentPosition: any;
+  loading: boolean;
 }
 
 const CurrentPositionAnalysis: React.FC<CurrentPositionProps> = ({ 
-  currentPositionInfo, 
-  signals 
+  currentPosition, 
+  loading 
 }) => {
-  if (!currentPositionInfo) {
+  if (loading) {
     return (
-      <Alert
-        message="数据不足"
-        description="无法分析当前位置，请确保选择了有效的股票对。"
-        type="warning"
-        showIcon
-      />
+      <Card bordered={false}>
+        <div style={{ textAlign: 'center', padding: '40px 0' }}>
+          <Spin />
+          <div style={{ marginTop: 8 }}>加载数据中...</div>
+        </div>
+      </Card>
     );
   }
   
-  const { 
-    current_ratio, 
-    nearest_signals,
-    similarity_score, 
-    percentile, 
-    is_extreme,
-    z_score,
-    deviation_from_trend,
-    volatility_level,
-    historical_signal_pattern, 
-    recommendation 
-  } = currentPositionInfo;
+  if (!currentPosition) {
+    return (
+      <Card bordered={false}>
+        <Empty description="无法获取当前市场位置数据" />
+      </Card>
+    );
+  }
   
-  // 获取波动性级别对应的标签颜色
-  const getVolatilityColor = (level: string) => {
+  const getZScoreColor = (zScore: number | null) => {
+    if (zScore === null) return '';
+    const absZScore = Math.abs(zScore);
+    if (absZScore > 2) return zScore > 0 ? '#ff4d4f' : '#52c41a';
+    if (absZScore > 1) return zScore > 0 ? '#faad14' : '#1890ff';
+    return '#8c8c8c';
+  };
+  
+  const getPercentileTag = (percentile: number | null) => {
+    if (percentile === null) return null;
+    
+    if (percentile > 0.8) return <Tag color="red">历史高位</Tag>;
+    if (percentile > 0.7) return <Tag color="orange">相对高位</Tag>;
+    if (percentile < 0.2) return <Tag color="green">历史低位</Tag>;
+    if (percentile < 0.3) return <Tag color="blue">相对低位</Tag>;
+    return <Tag color="default">中等位置</Tag>;
+  };
+  
+  const getVolatilityTag = (level: string | null) => {
+    if (!level) return null;
+    
     switch (level) {
-      case 'low': return 'success';
-      case 'medium': return 'warning';
-      case 'high': return 'error';
-      default: return 'default';
+      case 'high': return <Tag color="red">高波动</Tag>;
+      case 'medium': return <Tag color="orange">中等波动</Tag>;
+      case 'low': return <Tag color="green">低波动</Tag>;
+      default: return null;
     }
   };
   
-  // 获取波动性级别的中文描述
-  const getVolatilityText = (level: string) => {
-    switch (level) {
-      case 'low': return '低';
-      case 'medium': return '中';
-      case 'high': return '高';
-      default: return '未知';
-    }
+  const getDeviationText = (deviation: number | null) => {
+    if (deviation === null) return null;
+    
+    const absDeviation = Math.abs(deviation);
+    if (absDeviation < 2) return "接近趋势线";
+    if (deviation > 0) return `高于趋势线 ${deviation.toFixed(1)}%`;
+    return `低于趋势线 ${Math.abs(deviation).toFixed(1)}%`;
   };
-
-  // 获取历史信号模式的描述与颜色
-  const getPatternTag = (pattern: string | null) => {
-    if (!pattern) return null;
-
-    let color = 'default';
-    switch (pattern) {
-      case '连续超买':
-        color = 'error';
-        break;
-      case '连续超卖':
-        color = 'success';
-        break;
-      case '震荡切换':
-        color = 'warning';
-        break;
-      case '混合模式':
-        color = 'processing';
-        break;
-    }
-
-    return <Tag color={color}>{pattern}</Tag>;
-  };
-
-  // 相似信号表格列定义
-  const similarSignalColumns = [
-    {
-      title: '日期',
-      dataIndex: 'date',
-      key: 'date',
-    },
-    {
-      title: '比值',
-      dataIndex: 'ratio',
-      key: 'ratio',
-      render: (ratio: number) => ratio.toFixed(4)
-    },
-    {
-      title: '类型',
-      dataIndex: 'type',
-      key: 'type',
-      render: (type: string) => (
-        <Tag color={type === 'positive' ? 'red' : 'green'}>
-          {type === 'positive' ? '超买' : '超卖'}
-        </Tag>
-      )
-    },
-    {
-      title: '强度',
-      dataIndex: 'strength',
-      key: 'strength',
-      render: (strength: string) => {
-        let color = 'blue';
-        if (strength === 'strong') color = 'red';
-        else if (strength === 'medium') color = 'orange';
-        return <Tag color={color}>{strength === 'strong' ? '强' : strength === 'medium' ? '中' : '弱'}</Tag>;
-      }
-    },
-    {
-      title: '相似度',
-      dataIndex: 'similarity',
-      key: 'similarity',
-      render: (similarity: number) => (
-        <Progress 
-          percent={similarity * 100} 
-          size="small" 
-          format={percent => `${percent?.toFixed(0)}%`}
-          strokeColor={similarity > 0.8 ? '#52c41a' : similarity > 0.6 ? '#faad14' : '#1890ff'}
-        />
-      )
-    }
-  ];
   
-  // 生成历史分布图表选项
-  const getHistogramOption = () => {
-    if (!signals.length) {
-      return {
-        title: {
-          text: '暂无历史比值数据',
-          left: 'center'
-        }
-      };
-    }
+  const getTrendStrengthTag = (trendStrength: any) => {
+    if (!trendStrength) return null;
     
-    // 提取所有比值用于统计
-    const ratioValues = signals.map(s => s.ratio);
-    
-    // 计算比值范围
-    const minRatio = Math.min(...ratioValues, current_ratio) * 0.95;
-    const maxRatio = Math.max(...ratioValues, current_ratio) * 1.05;
-    
-    // 计算直方图的区间数（根据数据量动态调整）
-    const binCount = Math.min(20, Math.max(10, Math.floor(Math.sqrt(ratioValues.length))));
-    
-    // 计算每个区间的宽度
-    const binWidth = (maxRatio - minRatio) / binCount;
-    
-    // 创建区间
-    const bins = Array(binCount).fill(0).map((_, i) => ({
-      min: minRatio + i * binWidth,
-      max: minRatio + (i + 1) * binWidth,
-      count: 0
-    }));
-    
-    // 统计每个区间的数量
-    ratioValues.forEach(ratio => {
-      const binIndex = Math.min(binCount - 1, Math.max(0, Math.floor((ratio - minRatio) / binWidth)));
-      bins[binIndex].count++;
-    });
-    
-    // 找到当前比值落在哪个区间
-    const currentBinIndex = Math.min(binCount - 1, Math.max(0, Math.floor((current_ratio - minRatio) / binWidth)));
-    
-    // 创建图表数据
-    const xAxisData = bins.map((bin, index) => {
-      const midpoint = (bin.min + bin.max) / 2;
-      return midpoint.toFixed(4);
-    });
-    
-    const seriesData = bins.map((bin, index) => {
-      return {
-        value: bin.count,
-        itemStyle: {
-          color: index === currentBinIndex ? '#ff4d4f' : '#5470c6'
-        }
-      };
-    });
-    
-    return {
-      title: {
-        text: '比值历史分布',
-        left: 'center',
-        top: 10
-      },
-      tooltip: {
-        trigger: 'item',
-        formatter: function(params: any) {
-          if (params.seriesType === 'bar') {
-            const bin = bins[params.dataIndex];
-            return `比值区间: ${bin.min.toFixed(4)} - ${bin.max.toFixed(4)}<br/>数量: ${params.value}`;
-          }
-          return params.name;
-        }
-      },
-      grid: {
-        top: 60,
-        left: 60,
-        right: 60,
-        bottom: 60
-      },
-      xAxis: {
-        type: 'category',
-        data: xAxisData,
-        name: '价格比值',
-        nameLocation: 'middle',
-        nameGap: 30,
-        axisLabel: {
-          rotate: 45,
-          formatter: function(value: string) {
-            // 保留4位小数
-            return parseFloat(value).toFixed(4);
-          }
-        }
-      },
-      yAxis: {
-        type: 'value',
-        name: '出现频次',
-        nameLocation: 'middle',
-        nameGap: 40
-      },
-      series: [
-        {
-          name: '比值分布',
-          type: 'bar',
-          data: seriesData,
-          markLine: {
-            symbol: ['none', 'none'],
-            silent: true,
-            data: [
-              {
-                name: '当前比值',
-                xAxis: currentBinIndex,
-                lineStyle: {
-                  color: '#ff4d4f',
-                  width: 2,
-                  type: 'solid'
-                },
-                label: {
-                  show: true,
-                  formatter: '当前比值',
-                  position: 'insideEndTop',
-                  color: '#ff4d4f',
-                  fontSize: 12,
-                  fontWeight: 'bold'
-                }
-              }
-            ]
-          }
-        }
-      ]
+    const colors: {[key: string]: string} = {
+      '无明显趋势': 'default',
+      '弱趋势': 'blue',
+      '中等趋势': 'orange',
+      '强趋势': 'red'
     };
+    
+    const icons: {[key: string]: React.ReactNode} = {
+      '上升': <ArrowUpOutlined />,
+      '下降': <ArrowDownOutlined />,
+      '平稳': null
+    };
+    
+    const iconElement = trendStrength.direction ? icons[trendStrength.direction as string] : null;
+    
+    return (
+      <Tag color={colors[trendStrength.level] || 'default'}>
+        {iconElement && <span style={{ marginRight: 4 }}>{iconElement}</span>}
+        {trendStrength.level} {trendStrength.value && `(${trendStrength.value})`}
+      </Tag>
+    );
   };
   
-  // 生成Z分数仪表盘图表
-  const getZScoreGaugeOption = () => {
-    const zValue = z_score || 0;
-    const absZScore = Math.abs(zValue);
+  const getNearestSignals = () => {
+    if (!currentPosition.nearest_signals || currentPosition.nearest_signals.length === 0) {
+      return <Text type="secondary">未找到相似的历史信号</Text>;
+    }
     
-    // 确定颜色区域
-    const colorStops = [
-      { offset: 0, color: '#91cc75' },    // 绿色区域（中性）
-      { offset: 0.4, color: '#91cc75' },  // 绿色区域（中性）
-      { offset: 0.6, color: '#fac858' },  // 黄色区域（中等偏离）
-      { offset: 0.8, color: '#ee6666' },  // 红色区域（高偏离）
-      { offset: 1, color: '#73c0de' }     // 蓝色区域（极端偏离）
-    ];
-    
-    return {
-      series: [
-        {
-          type: 'gauge',
-          min: -4,
-          max: 4,
-          splitNumber: 8,
-          radius: '100%',
-          axisLine: {
-            lineStyle: {
-              width: 30,
-              color: [
-                [0.2, '#91cc75'],  // 绿色区域（中性）
-                [0.8, '#fac858'],  // 黄色区域（中等偏离）
-                [1, '#ee6666']     // 红色区域（高偏离）
-              ]
-            }
-          },
-          pointer: {
-            icon: 'path://M12.8,0.7l12,40.1H0.7L12.8,0.7z',
-            length: '12%',
-            width: 20,
-            offsetCenter: [0, '-60%'],
-            itemStyle: {
-              color: 'auto'
-            }
-          },
-          axisTick: {
-            length: 12,
-            lineStyle: {
-              color: 'auto',
-              width: 2
-            }
-          },
-          splitLine: {
-            length: 20,
-            lineStyle: {
-              color: 'auto',
-              width: 3
-            }
-          },
-          axisLabel: {
-            color: '#464646',
-            fontSize: 14,
-            distance: -60,
-            formatter: function(value: number) {
-              if (value === 0) return '0';
-              if (value === -2 || value === 2) return value.toString();
-              if (value === -4 || value === 4) return value.toString();
-              return '';
-            }
-          },
-          title: {
-            offsetCenter: [0, '-20%'],
-            fontSize: 14
-          },
-          detail: {
-            fontSize: 20,
-            offsetCenter: [0, '0%'],
-            valueAnimation: true,
-            formatter: function(value: number) {
-              return value.toFixed(2);
-            },
-            color: 'auto'
-          },
-          data: [
-            {
-              value: zValue,
-              name: 'Z分数'
-            }
-          ]
-        }
-      ]
-    };
+    return (
+      <div>
+        {currentPosition.nearest_signals.map((signal: any, index: number) => (
+          <div key={index} style={{ marginBottom: index === currentPosition.nearest_signals.length - 1 ? 0 : 8 }}>
+            <Space>
+              <Tag color={signal.type === 'positive' ? 'green' : 'volcano'}>
+                {signal.type === 'positive' ? <ArrowUpOutlined /> : <ArrowDownOutlined />}
+                {signal.date}
+              </Tag>
+              <Text>相似度: {(signal.similarity * 100).toFixed(0)}%</Text>
+            </Space>
+          </div>
+        ))}
+      </div>
+    );
   };
   
-  // 生成偏离趋势图表
-  const getDeviationChartOption = () => {
-    // 没有偏离趋势数据时显示默认图表
-    if (deviation_from_trend === null) {
-      return {
-        title: {
-          text: '暂无偏离趋势数据',
-          left: 'center'
-        }
-      };
-    }
+  const getMeanReversionProbability = (probability: number | null) => {
+    if (probability === null) return null;
     
-    const deviationValue = deviation_from_trend;
-    const isPositive = deviationValue > 0;
+    let color = 'blue';
+    if (probability > 0.7) color = 'red';
+    else if (probability > 0.5) color = 'orange';
     
-    // 颜色根据偏离方向和大小变化
-    let color = '#1890ff'; // 默认蓝色
-    if (Math.abs(deviationValue) > 10) {
-      color = isPositive ? '#ff4d4f' : '#52c41a'; // 大幅偏离：正偏离红色，负偏离绿色
-    } else if (Math.abs(deviationValue) > 5) {
-      color = isPositive ? '#faad14' : '#1890ff'; // 中等偏离：正偏离黄色，负偏离蓝色
-    }
-    
-    return {
-      series: [
-        {
-          type: 'gauge',
-          min: -20,
-          max: 20,
-          splitNumber: 8,
-          radius: '100%',
-          axisLine: {
-            lineStyle: {
-              width: 30,
-              color: [
-                [0.25, '#52c41a'],  // 绿色区域（负偏离）
-                [0.5, '#1890ff'],   // 蓝色区域（中性）
-                [0.75, '#faad14'],  // 黄色区域（轻微正偏离）
-                [1, '#ff4d4f']      // 红色区域（大幅正偏离）
-              ]
-            }
-          },
-          pointer: {
-            icon: 'path://M12.8,0.7l12,40.1H0.7L12.8,0.7z',
-            length: '12%',
-            width: 20,
-            offsetCenter: [0, '-60%'],
-            itemStyle: {
-              color
-            }
-          },
-          axisTick: {
-            length: 12,
-            lineStyle: {
-              color: 'auto',
-              width: 2
-            }
-          },
-          splitLine: {
-            length: 20,
-            lineStyle: {
-              color: 'auto',
-              width: 3
-            }
-          },
-          axisLabel: {
-            color: '#464646',
-            fontSize: 14,
-            distance: -60,
-            formatter: function(value: number) {
-              if (value === 0) return '0%';
-              if (value === -10 || value === 10) return value + '%';
-              if (value === -20 || value === 20) return value + '%';
-              return '';
-            }
-          },
-          title: {
-            offsetCenter: [0, '-20%'],
-            fontSize: 14
-          },
-          detail: {
-            fontSize: 20,
-            offsetCenter: [0, '0%'],
-            valueAnimation: true,
-            formatter: function(value: number) {
-              return value.toFixed(2) + '%';
-            },
-            color
-          },
-          data: [
-            {
-              value: deviationValue,
-              name: '偏离趋势线'
-            }
-          ]
-        }
-      ]
-    };
+    return (
+      <Statistic
+        title="均值回归概率"
+        value={probability}
+        precision={2}
+        valueStyle={{ color }}
+        formatter={(value) => `${(value as number * 100).toFixed(0)}%`}
+      />
+    );
   };
   
-  // 生成百分位图表
-  const getPercentileChartOption = () => {
-    const percentileValue = parseFloat(String(percentile)) * 100 || 0;
+  const getCyclePositionInfo = (cyclePosition: any) => {
+    if (!cyclePosition) return null;
     
-    return {
-      series: [
-        {
-          type: 'gauge',
-          startAngle: 180,
-          endAngle: 0,
-          min: 0,
-          max: 100,
-          radius: '100%',
-          itemStyle: {
-            color: {
-              type: 'linear',
-              x: 0,
-              y: 0,
-              x2: 1,
-              y2: 0,
-              colorStops: [
-                {
-                  offset: 0,
-                  color: '#52c41a'  // 左侧绿色
-                },
-                {
-                  offset: 0.5,
-                  color: '#1890ff'  // 中间蓝色
-                },
-                {
-                  offset: 1,
-                  color: '#ff4d4f'  // 右侧红色
-                }
-              ]
-            }
-          },
-          progress: {
-            show: true,
-            roundCap: true,
-            width: 18
-          },
-          pointer: {
-            icon: 'path://M2090.36389,615.30999 L2090.36389,615.30999 C2091.48372,615.30999 2092.40383,616.23010 2092.40383,617.34993 L2092.40383,617.34993 C2092.40383,618.46975 2091.48372,619.38987 2090.36389,619.38987 L2090.36389,619.38987 C2089.24406,619.38987 2088.32395,618.46975 2088.32395,617.34993 L2088.32395,617.34993 C2088.32395,616.23010 2089.24406,615.30999 2090.36389,615.30999 Z',
-            length: '75%',
-            width: 16,
-            offsetCenter: [0, '5%']
-          },
-          axisLine: {
-            roundCap: true,
-            lineStyle: {
-              width: 18
-            }
-          },
-          axisTick: {
-            splitNumber: 2,
-            lineStyle: {
-              width: 2,
-              color: '#999'
-            }
-          },
-          splitLine: {
-            length: 12,
-            lineStyle: {
-              width: 3,
-              color: '#999'
-            }
-          },
-          axisLabel: {
-            distance: 30,
-            color: '#999',
-            fontSize: 14
-          },
-          title: {
-            show: false
-          },
-          detail: {
-            valueAnimation: true,
-            width: '60%',
-            lineHeight: 40,
-            height: 40,
-            borderRadius: 8,
-            offsetCenter: [0, '35%'],
-            fontSize: 18,
-            fontWeight: 'bolder',
-            formatter: `${percentileValue.toFixed(2)}%`,
-            color: 'auto'
-          },
-          data: [
-            {
-              value: percentileValue
-            }
-          ]
-        }
-      ]
+    const positionColors: {[key: string]: string} = {
+      '顶部区域': 'red',
+      '上升区域': 'orange',
+      '中间区域': 'blue',
+      '下降区域': 'cyan',
+      '底部区域': 'green'
     };
-  };
-
-  // 获取警告提示组件
-  const getPositionAlert = () => {
-    if (is_extreme) {
-      return (
-        <Alert
-          message="价格比值异常警告"
-          description={`当前比值处于历史极端位置，具有较强的套利机会，Z分数为 ${z_score?.toFixed(2)}。`}
-          type="warning"
-          showIcon
-          icon={<WarningOutlined />}
-          style={{ marginBottom: 16 }}
-        />
-      );
-    } else if (similarity_score && similarity_score > 0.9) {
-      return (
-        <Alert
-          message="历史信号高度吻合"
-          description="当前比值与历史投资信号高度相似，可参考历史信号表现判断后市走势。"
-          type="info"
-          showIcon
-          icon={<InfoCircleOutlined />}
-          style={{ marginBottom: 16 }}
-        />
-      );
-    } else if (volatility_level === 'high') {
-      return (
-        <Alert
-          message="高波动性警告"
-          description="当前价格比值波动幅度较大，交易时需谨慎控制风险。"
-          type="warning"
-          showIcon
-          style={{ marginBottom: 16 }}
-        />
-      );
-    } else {
-      return (
-        <Alert
-          message="价格比值正常"
-          description="当前比值在正常范围内，未检测到明显异常。"
-          type="success"
-          showIcon
-          icon={<CheckCircleOutlined />}
-          style={{ marginBottom: 16 }}
-        />
-      );
-    }
+    
+    return (
+      <div>
+        <div style={{ marginBottom: 8 }}>
+          <Tag color={positionColors[cyclePosition.position] || 'default'}>
+            {cyclePosition.position}
+          </Tag>
+        </div>
+        <Text>{cyclePosition.status}</Text>
+      </div>
+    );
   };
   
   return (
-    <div className="current-position-analysis">
-      {getPositionAlert()}
+    <Card 
+      title={
+        <Space>
+          <InfoCircleOutlined />
+          <span>当前市场位置分析</span>
+        </Space>
+      }
+      bordered={false}
+    >
+      <Row gutter={16}>
+        <Col span={8}>
+          <Statistic
+            title="当前价格比值"
+            value={currentPosition.current_ratio}
+            precision={4}
+          />
+        </Col>
+        <Col span={8}>
+          <Statistic
+            title="Z值 (偏离程度)"
+            value={currentPosition.z_score !== null ? currentPosition.z_score : '-'}
+            precision={2}
+            valueStyle={{ color: getZScoreColor(currentPosition.z_score) }}
+            prefix={currentPosition.z_score > 0 ? <ArrowUpOutlined /> : <ArrowDownOutlined />}
+          />
+        </Col>
+        <Col span={8}>
+          <div style={{ marginBottom: 4 }}>
+            <Text type="secondary">位置评估</Text>
+          </div>
+          <Space>
+            {getPercentileTag(currentPosition.percentile)}
+            {getVolatilityTag(currentPosition.volatility_level)}
+            {currentPosition.is_extreme && <Tag color="red">极端位置</Tag>}
+          </Space>
+        </Col>
+      </Row>
       
-      <Card title="当前比值位置分析" bordered={false}>
-        <Row gutter={[16, 16]}>
-          <Col span={24} md={12}>
-            <Card type="inner" title="基本信息">
-              <Descriptions column={1} bordered size="small">
-                <Descriptions.Item label="当前比值">{current_ratio.toFixed(4)}</Descriptions.Item>
-                <Descriptions.Item label="历史分位">
-                  {percentile !== null ? (percentile * 100).toFixed(2) + '%' : '未知'}
-                </Descriptions.Item>
-                <Descriptions.Item label="Z得分">
-                  {z_score !== null ? (
-                    <>
-                      {z_score.toFixed(2)} 
-                      {z_score > 0 ? 
-                        <ArrowUpOutlined style={{ color: '#ff4d4f', marginLeft: 4 }} /> : 
-                        <ArrowDownOutlined style={{ color: '#52c41a', marginLeft: 4 }} />
-                      }
-                    </>
-                  ) : '未知'}
-                </Descriptions.Item>
-                <Descriptions.Item label="波动性">
-                  {volatility_level ? 
-                    <Tag color={getVolatilityColor(volatility_level)}>
-                      {getVolatilityText(volatility_level)}波动
-                    </Tag> : '未知'
-                  }
-                </Descriptions.Item>
-                <Descriptions.Item label="偏离趋势">
-                  {deviation_from_trend !== null ? deviation_from_trend.toFixed(2) + '%' : '未知'}
-                </Descriptions.Item>
-                <Descriptions.Item label="历史信号模式">
-                  {getPatternTag(historical_signal_pattern)}
-                </Descriptions.Item>
-              </Descriptions>
-            </Card>
-          </Col>
-          
-          <Col span={24} md={12}>
-            <Card type="inner" title="位置评估">
-              <Row gutter={[16, 16]}>
-                <Col span={12}>
-                  <ReactECharts 
-                    option={getPercentileChartOption()} 
-                    style={{ height: 180 }}
+      <Divider />
+      
+      <Row gutter={16}>
+        <Col span={12}>
+          <Title level={5}><LineChartOutlined /> 趋势分析</Title>
+          <Row gutter={16}>
+            <Col span={12}>
+              {getTrendStrengthTag(currentPosition.trend_strength)}
+              <div style={{ marginTop: 8 }}>{getDeviationText(currentPosition.deviation_from_trend)}</div>
+            </Col>
+            <Col span={12}>
+              {currentPosition.cycle_position && (
+                <>
+                  <Text strong>周期位置:</Text>
+                  {getCyclePositionInfo(currentPosition.cycle_position)}
+                </>
+              )}
+            </Col>
+          </Row>
+        </Col>
+        <Col span={12}>
+          <Title level={5}><NodeIndexOutlined /> 历史模式</Title>
+          <div>{currentPosition.historical_signal_pattern || "无明显模式"}</div>
+          <div style={{ marginTop: 12 }}>
+            {getMeanReversionProbability(currentPosition.mean_reversion_probability)}
+          </div>
+        </Col>
+      </Row>
+      
+      <Divider />
+      
+      {currentPosition.support_resistance && (
+        <>
+          <Row gutter={16}>
+            <Col span={24}>
+              <Title level={5}><AreaChartOutlined /> 支撑与阻力位</Title>
+              <Row gutter={16}>
+                <Col span={6}>
+                  <Statistic
+                    title="强支撑位"
+                    value={currentPosition.support_resistance.strong_support}
+                    precision={3}
+                    valueStyle={{ color: '#52c41a' }}
                   />
-                  <div style={{ textAlign: 'center', marginTop: 8 }}>
-                    <Text strong>历史分位百分比</Text>
-                  </div>
                 </Col>
-                <Col span={12}>
-                  <ReactECharts 
-                    option={getZScoreGaugeOption()} 
-                    style={{ height: 180 }}
+                <Col span={6}>
+                  <Statistic
+                    title="近期支撑位"
+                    value={currentPosition.support_resistance.nearby_support}
+                    precision={3}
+                    valueStyle={{ color: '#1890ff' }}
                   />
-                  <div style={{ textAlign: 'center', marginTop: 8 }}>
-                    <Text strong>Z分数</Text>
-                  </div>
+                </Col>
+                <Col span={6}>
+                  <Statistic
+                    title="近期阻力位"
+                    value={currentPosition.support_resistance.nearby_resistance}
+                    precision={3}
+                    valueStyle={{ color: '#faad14' }}
+                  />
+                </Col>
+                <Col span={6}>
+                  <Statistic
+                    title="强阻力位"
+                    value={currentPosition.support_resistance.strong_resistance}
+                    precision={3}
+                    valueStyle={{ color: '#ff4d4f' }}
+                  />
                 </Col>
               </Row>
-            </Card>
-          </Col>
-        </Row>
-        
-        <Divider />
-        
-        <Row gutter={[16, 16]}>
-          <Col span={24} md={12}>
-            <Card type="inner" title="历史分布">
-              <ReactECharts 
-                option={getHistogramOption()} 
-                style={{ height: 280 }}
-              />
-            </Card>
-          </Col>
+            </Col>
+          </Row>
           
-          <Col span={24} md={12}>
-            <Card type="inner" title="趋势偏离">
-              <ReactECharts 
-                option={getDeviationChartOption()} 
-                style={{ height: 280 }}
-              />
-            </Card>
-          </Col>
-        </Row>
-        
-        <Divider />
-        
-        <Row gutter={[16, 16]}>
-          <Col span={24}>
-            <Card type="inner" title="相似历史信号">
-              {nearest_signals && nearest_signals.length > 0 ? (
-                <Table 
-                  dataSource={nearest_signals.map((signal, index) => ({...signal, key: index}))} 
-                  columns={similarSignalColumns} 
-                  pagination={false} 
-                  size="small"
-                />
-              ) : (
-                <Empty description="暂无相似历史信号" />
-              )}
-            </Card>
-          </Col>
-        </Row>
-        
-        <Divider />
-        
-        <Card type="inner" title="投资建议">
-          <Paragraph style={{ fontSize: 16 }}>
-            <blockquote style={{ padding: '12px 16px', borderLeft: '4px solid #1890ff', background: '#f0f5ff' }}>
-              {recommendation || '暂无投资建议'}
-            </blockquote>
-          </Paragraph>
-        </Card>
-      </Card>
-    </div>
+          <Divider />
+        </>
+      )}
+      
+      <Row gutter={16}>
+        <Col span={24}>
+          <Title level={5}>相似历史信号</Title>
+          {getNearestSignals()}
+        </Col>
+      </Row>
+      
+      <Divider />
+      
+      <Title level={5}>综合建议</Title>
+      <Paragraph>
+        <Text strong>{currentPosition.recommendation}</Text>
+      </Paragraph>
+    </Card>
   );
 };
 
