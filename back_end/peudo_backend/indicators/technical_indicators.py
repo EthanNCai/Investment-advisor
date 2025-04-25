@@ -193,7 +193,7 @@ def calculate_rsi(prices: np.ndarray, windows: List[int] = [6, 12, 24]) -> Dict[
 
 
 def calculate_kdj(highs: np.ndarray, lows: np.ndarray, closes: np.ndarray, n: int = 9, m1: int = 3, m2: int = 3) -> \
-Dict[str, List[float]]:
+        Dict[str, List[float]]:
     """
     计算KDJ指标
     
@@ -341,7 +341,7 @@ def calculate_price_ratio_anomaly(ratio_data: List[float], delta_data: List[floa
     for i, (ratio, delta) in enumerate(zip(ratio_data, delta_data)):
         # 计算Z分数 - 基于与拟合线的偏差
         z_score = abs(delta / std) if std != 0 else 0
-
+        z_score_mark = (ratio - mean_ratio) / std if std != 0 else 0
         # 计算偏离度 - 基于与均值的相对偏差（百分比）
         deviation = (ratio - mean_ratio) / mean_ratio if mean_ratio != 0 else 0
         deviation_pct = abs(deviation * 100)  # 偏离百分比的绝对值
@@ -372,6 +372,7 @@ def calculate_price_ratio_anomaly(ratio_data: List[float], delta_data: List[floa
                 "index": i,
                 "value": ratio,
                 "z_score": z_score,
+                "z_score_mark": z_score_mark,
                 "deviation": deviation,
                 "deviation_pct": deviation_pct,
                 "absolute_deviation": absolute_deviation,
@@ -383,16 +384,17 @@ def calculate_price_ratio_anomaly(ratio_data: List[float], delta_data: List[floa
     # 对潜在异常点按综合分数排序
     potential_anomalies.sort(key=lambda x: x["combined_score"], reverse=True)
 
-    # 取分数最高的点作为确认的异常点（最多取原始数据的15%，至少6个点）
-    max_anomalies = max(int(len(ratio_data) * 0.15), 6)
+    # 取分数最高的点作为确认的异常点（最多取原始数据的20%，至少10个点）
+    max_anomalies = max(int(len(ratio_data) * 0.2), 10)
     for anomaly in potential_anomalies[:max_anomalies]:
         # 提高异常判定标准：综合分数必须大于2.4，或者超过绝对阈值，或被机器学习模型标记为异常
-        if anomaly["combined_score"] > 2.6 or anomaly["exceeds_threshold"] or (
-                anomaly["is_ml_anomaly"] and anomaly['combined_score'] > 2):
+        if anomaly["combined_score"] > 2.5 or anomaly["exceeds_threshold"] or (
+                anomaly["is_ml_anomaly"] and anomaly['combined_score'] > 1.8):
             anomalies.append({
                 "index": anomaly["index"],
                 "value": anomaly["value"],
                 "z_score": anomaly["z_score"],
+                "z_score_mark": anomaly["z_score_mark"],
                 "deviation": anomaly["deviation"],
                 "is_ml_anomaly": anomaly["is_ml_anomaly"]
             })

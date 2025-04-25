@@ -104,7 +104,34 @@ const InvestmentSignal: React.FC = () => {
       
       if (data && data.signals) {
         setSignals(data.signals);
-        setCurrentPositionInfo(data.current_position || null);
+        
+        // 确保当前位置信息的处理支持新字段
+        if (data.current_position) {
+          // 兼容处理：如果是旧格式数据，转换为新格式
+          if (data.current_position.nearest_signal_id && !data.current_position.nearest_signals) {
+            // 旧格式数据兼容
+            const nearestSignal = data.signals.find((s: Signal) => s.id === data.current_position.nearest_signal_id);
+            data.current_position.nearest_signals = nearestSignal ? 
+              [{
+                id: nearestSignal.id,
+                date: nearestSignal.date,
+                ratio: nearestSignal.ratio,
+                similarity: data.current_position.similarity_score || 0,
+                type: nearestSignal.type,
+                strength: nearestSignal.strength
+              }] : [];
+          }
+          
+          // 确保所有新字段存在
+          data.current_position.z_score = data.current_position.z_score || null;
+          data.current_position.deviation_from_trend = data.current_position.deviation_from_trend || null;
+          data.current_position.volatility_level = data.current_position.volatility_level || null;
+          data.current_position.historical_signal_pattern = data.current_position.historical_signal_pattern || null;
+          
+          setCurrentPositionInfo(data.current_position);
+        } else {
+          setCurrentPositionInfo(null);
+        }
         
         // 自动选择第一个信号
         if (data.signals.length > 0) {

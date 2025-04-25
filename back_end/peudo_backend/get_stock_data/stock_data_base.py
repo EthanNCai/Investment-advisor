@@ -1,12 +1,9 @@
-import json
-import os
 import sqlite3
 from datetime import datetime
 from pathlib import Path
-from typing import Dict
+
 
 # 修改导入路径，使用相对导入
-from .get_stock_data_A_and_G import EastMoneyKLineSpider
 
 
 class StockKlineDatabase:
@@ -186,16 +183,3 @@ class StockKlineDatabase:
 
 if __name__ == '__main__':
     pass
-    # splider = EastMoneyKLineSpider("00700")
-    # data = splider.get_klines()
-    # data_list = splider.format_klines(data['klines'])
-    # db = StockKlineDatabase()
-    # db.insert_kline_data(data_list, data['code'], data['name'], data['type'])
-    # result = db.query_kline(
-    #     stock_code='00700',
-    #     start_date='2023-07-10',
-    #     end_date='2025-04-13'
-    # )
-    # print(result)
-    # # db.cleanup_old_data()
-    # db.close()

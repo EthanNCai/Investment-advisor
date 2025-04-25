@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Card, Typography, Row, Col, Form, Input, Button, InputNumber, Select, Divider, Spin, Alert, Tabs } from 'antd';
-import { QuestionCircleOutlined, SettingOutlined, LineChartOutlined, TableOutlined } from '@ant-design/icons';
+import { Card, Typography, Row, Col, Form, Input, Button, InputNumber, Select, Divider, Spin, Alert, Tabs, Switch, Tooltip, Space, message } from 'antd';
+import { QuestionCircleOutlined, SettingOutlined, LineChartOutlined, TableOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import BacktestResults from './BacktestResults';
 import BacktestTradesList from './BacktestTradesList';
 
@@ -14,6 +14,17 @@ interface BacktestSystemProps {
   signals: any[];
 }
 
+// 最优阈值接口
+interface OptimalThreshold {
+  entry_threshold: number;
+  exit_threshold: number;
+  lookback_period: number;
+  estimated_profit: number;
+  win_rate: number;
+  trade_count: number;
+  strategy_type: string;
+}
+
 // 回测参数接口
 interface BacktestParams {
   code_a: string;
@@ -21,7 +32,7 @@ interface BacktestParams {
   start_date: string;
   end_date: string;
   initial_capital: number;
-  position_size_type: string; // 'fixed', 'percent'
+  position_size_type: string; // 'fixed', 'percent', 'kelly'
   position_size: number;
   entry_threshold: number;
   exit_threshold: number;
@@ -29,6 +40,14 @@ interface BacktestParams {
   take_profit: number;
   max_positions: number;
   trading_fee: number;
+  trailing_stop: number;
+  time_stop: number;
+  breakeven_stop: boolean;
+  strategy_type: string;
+  hedge_mode: string;
+  secondary_threshold: number;
+  volatility_window: number;
+  trend_window: number;
 }
 
 // 回测结果接口
@@ -37,28 +56,57 @@ interface BacktestResult {
     date: string;
     equity: number;
     drawdown: number;
+    cash: number;
+    positions_value: number;
+    signal: number;
+    ratio: number;
   }[];
   trades: {
     id: number;
     entry_date: string;
     exit_date: string | null;
+    holding_days: number;
     entry_price: number;
     exit_price: number | null;
-    position_type: string; // "long" | "short"
+    position_type: string;
     position_size: number;
     pnl: number;
     pnl_percent: number;
-    status: string; // "open" | "closed"
+    status: 'open' | 'closed';
+    exit_reason: string;
+    signal_value: number;
   }[];
-  metrics: {
-    total_return: number;
-    annual_return: number;
-    sharpe_ratio: number;
-    max_drawdown: number;
-    win_rate: number;
-    profit_factor: number;
-    total_trades: number;
+  initial_capital: number;
+  final_equity: number;
+  total_return: number;
+  annual_return: number;
+  max_drawdown: number;
+  max_drawdown_duration: number;
+  recovery_period: number;
+  sharpe_ratio: number;
+  sortino_ratio: number;
+  calmar_ratio: number;
+  total_trades: number;
+  profitable_trades: number;
+  losing_trades: number;
+  win_rate: number;
+  avg_profit: number;
+  avg_loss: number;
+  profit_factor: number;
+  avg_holding_period: number;
+  strategy_parameters: {
+    strategy_type: string;
+    entry_threshold: number;
+    exit_threshold: number;
+    stop_loss: number;
+    take_profit: number;
+    trailing_stop: number;
+    time_stop: number;
+    hedge_mode: string;
+    position_size_type: string;
+    position_size: number;
   };
+  error?: string;
 }
 
 const BacktestSystem: React.FC<BacktestSystemProps> = ({ codeA, codeB, signals }) => {
@@ -67,6 +115,10 @@ const BacktestSystem: React.FC<BacktestSystemProps> = ({ codeA, codeB, signals }
   const [error, setError] = useState<string | null>(null);
   const [backtestResults, setBacktestResults] = useState<BacktestResult | null>(null);
   const [activeTab, setActiveTab] = useState<string>("1");
+  const [showAdvancedOptions, setShowAdvancedOptions] = useState<boolean>(false);
+  const [strategyType, setStrategyType] = useState<string>("zscore");
+  const [optimalThresholdLoading, setOptimalThresholdLoading] = useState<boolean>(false);
+  const [optimalThreshold, setOptimalThreshold] = useState<OptimalThreshold | null>(null);
 
   // 提取信号日期范围
   const getDateRange = () => {
@@ -84,6 +136,11 @@ const BacktestSystem: React.FC<BacktestSystemProps> = ({ codeA, codeB, signals }
 
   const { minDate, maxDate } = getDateRange();
 
+  // 监听策略类型更改
+  const handleStrategyTypeChange = (value: string) => {
+    setStrategyType(value);
+  };
+
   // 初始化表单默认值
   React.useEffect(() => {
     form.setFieldsValue({
@@ -100,6 +157,14 @@ const BacktestSystem: React.FC<BacktestSystemProps> = ({ codeA, codeB, signals }
       take_profit: 10,
       max_positions: 5,
       trading_fee: 0.0003,
+      trailing_stop: 0,
+      time_stop: 0,
+      breakeven_stop: false,
+      strategy_type: 'zscore',
+      hedge_mode: 'single',
+      secondary_threshold: 1.0,
+      volatility_window: 20,
+      trend_window: 50
     });
   }, [codeA, codeB, minDate, maxDate]);
 
@@ -131,6 +196,12 @@ const BacktestSystem: React.FC<BacktestSystemProps> = ({ codeA, codeB, signals }
       }
       
       const data = await response.json();
+      
+      if (data.error) {
+        setError(data.error);
+        return;
+      }
+      
       setBacktestResults(data);
       setActiveTab("2"); // 自动切换到结果标签页
     } catch (err) {
@@ -143,6 +214,57 @@ const BacktestSystem: React.FC<BacktestSystemProps> = ({ codeA, codeB, signals }
 
   const handleFormFinish = (values: any) => {
     runBacktest(values);
+  };
+
+  // 计算最优阈值
+  const calculateOptimalThreshold = async () => {
+    setOptimalThresholdLoading(true);
+    setError(null);
+    
+    try {
+      const currentStrategyType = form.getFieldValue('strategy_type');
+      const params = {
+        code_a: codeA,
+        code_b: codeB,
+        lookback: 60, // 默认使用60天的回溯期
+        strategy_type: currentStrategyType
+      };
+      
+      const response = await fetch('http://localhost:8000/calculate_optimal_threshold/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(params),
+      });
+      
+      if (!response.ok) {
+        throw new Error('计算最优阈值失败，请稍后重试');
+      }
+      
+      const data = await response.json();
+      
+      if (data.error) {
+        setError(data.error);
+        return;
+      }
+      
+      setOptimalThreshold(data);
+      
+      // 自动设置表单中的阈值
+      form.setFieldsValue({
+        entry_threshold: data.entry_threshold,
+        exit_threshold: data.exit_threshold
+      });
+      
+      // 显示成功提示
+      message.success(`已设置最优阈值：入场 ${data.entry_threshold.toFixed(2)}，出场 ${data.exit_threshold.toFixed(2)}`);
+    } catch (err) {
+      console.error('计算最优阈值错误:', err);
+      setError(err instanceof Error ? err.message : '计算最优阈值时发生错误');
+    } finally {
+      setOptimalThresholdLoading(false);
+    }
   };
 
   return (
@@ -203,6 +325,40 @@ const BacktestSystem: React.FC<BacktestSystemProps> = ({ codeA, codeB, signals }
               
               <Col span={24}>
                 <Divider />
+                <Title level={5}>策略设置</Title>
+              </Col>
+
+              <Col span={8}>
+                <Form.Item
+                  name="strategy_type"
+                  label="策略类型"
+                  rules={[{ required: true, message: '请选择策略类型' }]}
+                >
+                  <Select onChange={handleStrategyTypeChange}>
+                    <Option value="zscore">Z分数策略</Option>
+                    <Option value="percent">百分比偏离策略</Option>
+                    <Option value="volatility">波动率调整策略</Option>
+                    <Option value="trend">趋势跟踪策略</Option>
+                  </Select>
+                </Form.Item>
+              </Col>
+
+              <Col span={8}>
+                <Form.Item
+                  name="hedge_mode"
+                  label="对冲模式"
+                  tooltip="单边交易只做资产A，对冲交易同时做资产A和B"
+                  rules={[{ required: true, message: '请选择对冲模式' }]}
+                >
+                  <Select>
+                    <Option value="single">单边交易</Option>
+                    <Option value="pair">对冲交易</Option>
+                  </Select>
+                </Form.Item>
+              </Col>
+              
+              <Col span={24}>
+                <Divider />
                 <Title level={5}>仓位管理</Title>
               </Col>
               
@@ -215,6 +371,7 @@ const BacktestSystem: React.FC<BacktestSystemProps> = ({ codeA, codeB, signals }
                   <Select>
                     <Option value="fixed">固定金额</Option>
                     <Option value="percent">资金百分比</Option>
+                    <Option value="kelly">凯利公式</Option>
                   </Select>
                 </Form.Item>
               </Col>
@@ -252,71 +409,138 @@ const BacktestSystem: React.FC<BacktestSystemProps> = ({ codeA, codeB, signals }
               
               <Col span={24}>
                 <Divider />
-                <Title level={5}>交易规则</Title>
+                <Title level={5}>信号参数</Title>
+              </Col>
+              
+              <Col span={24} style={{ marginBottom: 16 }}>
+                <Row gutter={16} align="middle">
+                  <Col flex="auto">
+                    <Text>设置信号阈值参数</Text>
+                  </Col>
+                  <Col>
+                    <Tooltip title="自动计算最优入场和出场阈值，基于历史数据">
+                      <Button 
+                        type="primary" 
+                        ghost
+                        icon={<LineChartOutlined />}
+                        loading={optimalThresholdLoading}
+                        onClick={calculateOptimalThreshold}
+                      >
+                        计算最优阈值
+                      </Button>
+                    </Tooltip>
+                  </Col>
+                </Row>
+                {optimalThreshold && (
+                  <Alert
+                    style={{ marginTop: 12 }}
+                    message="最优阈值分析结果"
+                    description={
+                      <>
+                        <div>策略类型: {optimalThreshold.strategy_type === 'zscore' ? 'Z分数策略' : 
+                                        optimalThreshold.strategy_type === 'percent' ? '百分比偏离策略' : 
+                                        optimalThreshold.strategy_type === 'volatility' ? '波动率调整策略' : '趋势跟踪策略'}</div>
+                        <div>回溯天数: {optimalThreshold.lookback_period}天</div>
+                        <div>建议入场阈值: <Text strong>{optimalThreshold.entry_threshold.toFixed(2)}</Text></div>
+                        <div>建议出场阈值: <Text strong>{optimalThreshold.exit_threshold.toFixed(2)}</Text></div>
+                        <div>估计收益率: <Text type="success">{optimalThreshold.estimated_profit.toFixed(2)}%</Text></div>
+                        <div>胜率: {(optimalThreshold.win_rate * 100).toFixed(2)}%</div>
+                        <div>模拟交易次数: {optimalThreshold.trade_count}次</div>
+                      </>
+                    }
+                    type="info"
+                    showIcon
+                  />
+                )}
               </Col>
               
               <Col span={8}>
                 <Form.Item
                   name="entry_threshold"
-                  label="入场阈值(Z-score)"
-                  tooltip="当价差Z-score超过该阈值时入场"
+                  label="入场阈值"
+                  tooltip="信号超过该阈值时开仓"
                   rules={[{ required: true, message: '请输入入场阈值' }]}
                 >
-                  <InputNumber 
-                    min={0.5} 
-                    max={5} 
-                    step={0.1}
-                    style={{ width: '100%' }}
-                  />
+                  <InputNumber min={0.5} max={5} step={0.1} style={{ width: '100%' }} />
                 </Form.Item>
               </Col>
               
               <Col span={8}>
                 <Form.Item
                   name="exit_threshold"
-                  label="出场阈值(Z-score)"
-                  tooltip="当价差Z-score低于该阈值时出场"
+                  label="出场阈值"
+                  tooltip="信号低于该阈值时平仓"
                   rules={[{ required: true, message: '请输入出场阈值' }]}
                 >
-                  <InputNumber 
-                    min={0.1} 
-                    max={3} 
-                    step={0.1}
-                    style={{ width: '100%' }}
-                  />
+                  <InputNumber min={0.1} max={2} step={0.1} style={{ width: '100%' }} />
                 </Form.Item>
               </Col>
+
+              {strategyType !== 'zscore' && (
+                <Col span={8}>
+                  <Form.Item
+                    name="secondary_threshold"
+                    label={
+                      strategyType === 'percent' ? "百分比系数" : 
+                      strategyType === 'volatility' ? "波动调整系数" : 
+                      "趋势权重系数"
+                    }
+                    tooltip="策略特定参数，用于调整信号灵敏度"
+                  >
+                    <InputNumber min={0.1} max={5} step={0.1} style={{ width: '100%' }} />
+                  </Form.Item>
+                </Col>
+              )}
               
-              <Col span={8}>
-                <Form.Item
-                  name="trading_fee"
-                  label="交易费率"
-                  tooltip="交易金额的百分比"
-                  rules={[{ required: true, message: '请输入交易费率' }]}
-                >
-                  <InputNumber 
-                    min={0} 
-                    max={0.01} 
-                    step={0.0001}
-                    style={{ width: '100%' }}
-                    formatter={value => `${(Number(value) * 100).toFixed(2)} %`}
-                  />
-                </Form.Item>
-              </Col>
+              {strategyType === 'volatility' && (
+                <Col span={8}>
+                  <Form.Item
+                    name="volatility_window"
+                    label="波动率窗口"
+                    tooltip="计算波动率的时间窗口（天）"
+                  >
+                    <InputNumber min={5} max={60} step={1} style={{ width: '100%' }} />
+                  </Form.Item>
+                </Col>
+              )}
+              
+              {strategyType === 'trend' && (
+                <Col span={8}>
+                  <Form.Item
+                    name="trend_window"
+                    label="趋势窗口"
+                    tooltip="计算长期趋势的时间窗口（天）"
+                  >
+                    <InputNumber min={20} max={200} step={5} style={{ width: '100%' }} />
+                  </Form.Item>
+                </Col>
+              )}
               
               <Col span={24}>
                 <Divider />
-                <Title level={5}>风险管理</Title>
+                <Row align="middle">
+                  <Col span={12}>
+                    <Title level={5}>风险管理</Title>
+                  </Col>
+                  <Col span={12} style={{ textAlign: 'right' }}>
+                    <Button 
+                      type="link" 
+                      onClick={() => setShowAdvancedOptions(!showAdvancedOptions)}
+                    >
+                      {showAdvancedOptions ? '隐藏高级选项' : '显示高级选项'}
+                    </Button>
+                  </Col>
+                </Row>
               </Col>
               
               <Col span={8}>
                 <Form.Item
                   name="stop_loss"
                   label="止损比例(%)"
-                  tooltip="价格移动超过该百分比时触发止损"
+                  tooltip="亏损达到该比例时强制平仓"
                   rules={[{ required: true, message: '请输入止损比例' }]}
                 >
-                  <InputNumber min={1} max={20} step={0.5} style={{ width: '100%' }} />
+                  <InputNumber min={0} max={50} step={1} style={{ width: '100%' }} />
                 </Form.Item>
               </Col>
               
@@ -324,31 +548,89 @@ const BacktestSystem: React.FC<BacktestSystemProps> = ({ codeA, codeB, signals }
                 <Form.Item
                   name="take_profit"
                   label="止盈比例(%)"
-                  tooltip="价格移动超过该百分比时触发止盈"
+                  tooltip="盈利达到该比例时强制平仓"
                   rules={[{ required: true, message: '请输入止盈比例' }]}
                 >
-                  <InputNumber min={1} max={50} step={0.5} style={{ width: '100%' }} />
+                  <InputNumber min={0} max={100} step={1} style={{ width: '100%' }} />
                 </Form.Item>
               </Col>
               
-              <Col span={24} style={{ marginTop: 16 }}>
+              <Col span={8}>
+                <Form.Item
+                  name="trading_fee"
+                  label="交易费率"
+                  tooltip="交易成本比例，如0.0003表示万分之三"
+                  rules={[{ required: true, message: '请输入交易费率' }]}
+                >
+                  <InputNumber 
+                    min={0} 
+                    max={0.01} 
+                    step={0.0001}
+                    style={{ width: '100%' }}
+                    formatter={value => `${value} (${(Number(value) * 100).toFixed(4)}%)`}
+                  />
+                </Form.Item>
+              </Col>
+              
+              {showAdvancedOptions && (
+                <>
+                  <Col span={8}>
+                    <Form.Item
+                      name="trailing_stop"
+                      label="追踪止损(%)"
+                      tooltip="从最高盈利点回落该比例时平仓，0表示不启用"
+                    >
+                      <InputNumber min={0} max={50} step={1} style={{ width: '100%' }} />
+                    </Form.Item>
+                  </Col>
+                  
+                  <Col span={8}>
+                    <Form.Item
+                      name="time_stop"
+                      label="时间止损(天)"
+                      tooltip="持仓超过该天数时平仓，0表示不启用"
+                    >
+                      <InputNumber min={0} max={365} step={1} style={{ width: '100%' }} />
+                    </Form.Item>
+                  </Col>
+                  
+                  <Col span={8}>
+                    <Form.Item
+                      name="breakeven_stop"
+                      label="保本止损"
+                      tooltip="当曾经盈利超过3%后回落至亏损时平仓保本"
+                      valuePropName="checked"
+                    >
+                      <Switch />
+                    </Form.Item>
+                  </Col>
+                </>
+              )}
+              
+              <Col span={24} style={{ textAlign: 'center', marginTop: 24 }}>
                 <Form.Item>
-                  <Button type="primary" htmlType="submit" loading={loading} style={{ marginRight: 16 }}>
+                  <Button 
+                    type="primary" 
+                    htmlType="submit" 
+                    loading={loading}
+                    style={{ minWidth: 120 }}
+                  >
                     运行回测
                   </Button>
-                  <Button onClick={() => form.resetFields()}>
-                    重置参数
-                  </Button>
                 </Form.Item>
               </Col>
-              
-              {error && (
-                <Col span={24}>
-                  <Alert message="回测错误" description={error} type="error" showIcon />
-                </Col>
-              )}
             </Row>
           </Form>
+          
+          {error && (
+            <Alert
+              message="回测错误"
+              description={error}
+              type="error"
+              showIcon
+              style={{ marginTop: 16 }}
+            />
+          )}
         </TabPane>
         
         <TabPane 
@@ -356,19 +638,12 @@ const BacktestSystem: React.FC<BacktestSystemProps> = ({ codeA, codeB, signals }
           key="2"
           disabled={!backtestResults}
         >
-          {loading ? (
-            <div style={{ textAlign: 'center', padding: '30px' }}>
-              <Spin tip="回测执行中..." />
-            </div>
-          ) : backtestResults ? (
+          {backtestResults ? (
             <BacktestResults results={backtestResults} />
           ) : (
-            <Alert 
-              message="尚未运行回测" 
-              description="请在参数设置选项卡中设置参数并运行回测" 
-              type="info" 
-              showIcon 
-            />
+            <div style={{ textAlign: 'center', padding: 32 }}>
+              <Text type="secondary">请先运行回测</Text>
+            </div>
           )}
         </TabPane>
         
@@ -377,19 +652,12 @@ const BacktestSystem: React.FC<BacktestSystemProps> = ({ codeA, codeB, signals }
           key="3"
           disabled={!backtestResults}
         >
-          {loading ? (
-            <div style={{ textAlign: 'center', padding: '30px' }}>
-              <Spin tip="回测执行中..." />
-            </div>
-          ) : backtestResults ? (
+          {backtestResults ? (
             <BacktestTradesList trades={backtestResults.trades} />
           ) : (
-            <Alert 
-              message="尚未运行回测" 
-              description="请在参数设置选项卡中设置参数并运行回测" 
-              type="info" 
-              showIcon 
-            />
+            <div style={{ textAlign: 'center', padding: 32 }}>
+              <Text type="secondary">请先运行回测</Text>
+            </div>
           )}
         </TabPane>
       </Tabs>

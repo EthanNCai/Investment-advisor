@@ -679,13 +679,11 @@ async def get_investment_signals(request: SignalRequestModel):
         raise HTTPException(status_code=500, detail=f"获取投资信号失败: {str(e)}")
 
 
-# 原始的 @app.post("/api/backtest/price_signal") 路由替换为以下更简洁的版本
-
 @app.post("/backtest_strategy/")
 async def backtest_strategy(params: dict):
     """
     运行价差信号回测
-    
+
     参数:
     - params: 回测参数字典
         - code_a: 资产A代码
@@ -701,14 +699,14 @@ async def backtest_strategy(params: dict):
         - take_profit: 止盈比例
         - max_positions: 最大持仓数量
         - trading_fee: 交易费率
-    
+
     返回:
     - 回测结果对象
     """
     try:
         # 创建回测引擎实例
         engine = BacktestEngine()
-        
+
         # 运行回测并返回结果
         result = engine.run_price_ratio_backtest(params)
         return result
@@ -716,11 +714,75 @@ async def backtest_strategy(params: dict):
         return {"error": f"回测执行过程中发生错误: {str(e)}"}
 
 
+class OptimalThresholdRequest(BaseModel):
+    code_a: str
+    code_b: str
+    lookback: int = 60
+    strategy_type: str = "zscore"
+
+
+@app.post("/calculate_optimal_threshold/")
+async def calculate_optimal_threshold(request: OptimalThresholdRequest):
+    """
+    计算最优入场和出场阈值
+    
+    参数:
+    - code_a: 资产A代码
+    - code_b: 资产B代码
+    - lookback: 回溯天数，默认60天
+    - strategy_type: 策略类型，默认为"zscore"
+    
+    返回:
+    - 包含最优阈值的响应对象
+    """
+    try:
+        # 1. 获取股票数据
+        close_a_, close_b_, dates_a_, dates_b_ = get_stock_data_pair(request.code_a, request.code_b)
+        close_a, close_b, dates = date_alignment(close_a_, close_b_, dates_a_, dates_b_)
+
+        # 确保有足够的数据进行计算
+        if len(close_a) < request.lookback + 10:
+            return {"error": "历史数据不足，无法计算最优阈值，请选择更长的时间段或减小回溯天数"}
+
+        # 2. 创建回测引擎实例
+        engine = BacktestEngine()
+
+        # 3. 计算最优阈值
+        optimal_result = engine.calculate_optimal_threshold(
+            prices_a=close_a,
+            prices_b=close_b,
+            dates=dates,
+            lookback=request.lookback
+        )
+
+        # 4. 如果有错误，返回错误信息
+        if "error" in optimal_result:
+            return {"error": optimal_result["error"]}
+
+        # 5. 构建响应
+        response = {
+            "entry_threshold": optimal_result["optimal_entry_threshold"],
+            "exit_threshold": optimal_result["optimal_exit_threshold"],
+            "win_rate": optimal_result["expected_win_rate"],
+            "estimated_profit": optimal_result["expected_avg_profit"] * 100,  # 转换为百分比
+            "lookback_period": request.lookback,
+            "trade_count": optimal_result["trade_count"],
+            "strategy_type": request.strategy_type
+        }
+
+        return response
+
+    except Exception as e:
+        print(f"计算最优阈值时发生错误: {str(e)}")
+        traceback.print_exc()
+        return {"error": f"计算最优阈值时发生错误: {str(e)}"}
+
+
 if __name__ == "__main__":
     import uvicorn
 
     # 启动自动更新服务
-    # update_threads = start_auto_update_services()
+    update_threads = start_auto_update_services()
 
     # 启动API服务
     uvicorn.run(app, host="localhost", port=8000)
