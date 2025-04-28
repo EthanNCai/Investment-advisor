@@ -230,7 +230,7 @@ def analyze_current_position(
         # 计算较长期的波动率（如90天）作为比较基准
         long_term_ratios = ratio[-min(90, len(ratio)):]
         long_term_volatility = np.std(long_term_ratios) / np.mean(long_term_ratios)
-        
+
         # 比较近期波动率与长期波动率
         relative_volatility = recent_volatility / long_term_volatility if long_term_volatility else 1.0
 
@@ -244,7 +244,7 @@ def analyze_current_position(
             volatility_level = "high"
 
     # 5. 寻找最相似的历史信号（优化为多个相似信号）
-    similarity_threshold = 0.4
+    similarity_threshold = 0.5
     similar_signals = []
     res = []
     if signals:
@@ -253,41 +253,96 @@ def analyze_current_position(
         for signal in signals:
             signal_ratio = signal["ratio"]
 
-            # 计算比值差异的新方法
-            # 1. 首先计算比值的百分比差异
-            absolute_diff = abs(signal_ratio - current_ratio)
-            relative_diff = absolute_diff / max(signal_ratio, current_ratio)
-            # 2. 放大小差异以便更好区分高相似度值
-            # 使用适中的指数函数，避免相似度值过低
-            ratio_similarity = np.exp(-10 * relative_diff)
+            # 1. 比值相似度计算改进
+            # 使用对数差异计算，对不同数量级的比值更公平
+            log_current = np.log(current_ratio) if current_ratio > 0 else 0
+            log_signal = np.log(signal_ratio) if signal_ratio > 0 else 0
+            log_diff = abs(log_current - log_signal)
+            # 使用sigmoid函数平滑相似度曲线，保持值在0-1之间
+            ratio_similarity = 1 / (1 + np.exp(5 * log_diff))
 
-            # 3. 方向匹配加权（更强的加权效果）
+            # 2. 考虑相对于趋势线的位置（新增）
+            position_similarity = 1.0
+            if current_z_score is not None and "z_score_mark" in signal:
+                # 如果两者相对于趋势线的位置类似（同侧且幅度接近），增加相似度
+                z_diff = abs(current_z_score - signal["z_score_mark"])
+                position_similarity = np.exp(-0.3 * z_diff)  # 指数衰减，但衰减速度较慢
+
+            # 3. 改进方向匹配权重：考虑Z值大小，而不仅是正负
             direction_match = 1.0
             if current_z_score is not None and "z_score_mark" in signal:
-                if (current_z_score > 0 and signal["z_score_mark"] > 0) or (
-                        current_z_score < 0 and signal["z_score_mark"] < 0):
-                    direction_match = 1.25  # 方向一致性加分提高
-                else:
-                    direction_match = 0.85  # 方向不一致性减分降低
+                # 方向一致性
+                direction_same = (current_z_score > 0 and signal["z_score_mark"] > 0) or (
+                        current_z_score < 0 and signal["z_score_mark"] < 0)
 
-            # 4. 时间接近度（较新的信号可能更有参考价值）- 使时间权重差异更大
+                # 极端程度匹配（两者都是极端值或都是中性值）
+                extreme_match = (abs(current_z_score) > 1.8 and abs(signal["z_score_mark"]) > 1.8) or (
+                        abs(current_z_score) <= 1.8 and abs(signal["z_score_mark"]) <= 1.8)
+
+                if direction_same and extreme_match:
+                    direction_match = 1.3  # 方向和极端程度都匹配时加分最多
+                elif direction_same:
+                    direction_match = 1.15  # 仅方向匹配时适度加分
+                else:
+                    direction_match = 0.8  # 方向不匹配时更大幅度减分
+
+            # 4. 动态时间权重（新增）
+            # 根据市场环境变化调整时间权重重要性
             time_weight = 1.0
             if len(dates) > 0 and "date" in signal:
                 try:
                     signal_index = dates.index(signal["date"])
-                    time_factor = signal_index / len(dates)  # 0为最早的信号，1为最新的信号
-                    time_weight = 0.85 + (0.15 * time_factor)
+                    # 计算基础时间因子（0为最早信号，1为最新信号）
+                    time_factor = signal_index / len(dates)
+
+                    # 动态调整：在波动性高的市场中，最近的信号更重要
+                    if volatility_level == "high":
+                        time_weight = 0.7 + (0.3 * time_factor)  # 最新信号权重达到1.0，最旧信号为0.7
+                    elif volatility_level == "medium":
+                        time_weight = 0.8 + (0.2 * time_factor)  # 最新信号权重达到1.0，最旧信号为0.8
+                    else:  # low volatility
+                        time_weight = 0.9 + (0.1 * time_factor)  # 最新信号权重达到1.0，最旧信号为0.9
                 except ValueError:
                     # 信号日期不在当前日期列表中时，维持默认权重
                     pass
 
-            # 5. Z值相似性（添加新的相似度因子）
-            z_score_similarity = 1.0
-            if current_z_score is not None and "z_score_mark" in signal:
-                z_diff = abs(current_z_score - signal["z_score_mark"])
-                z_score_similarity = np.exp(-0.5 * z_diff)
+            # 5. 市场环境相似性
+            market_similarity = 1.0
 
-            # 6. 信号强度相似性
+            # 计算当前趋势方向
+            current_trend_direction = None
+            if len(fitting_line) >= 2:
+                # 使用拟合线的最近部分估计趋势
+                window_size = min(30, len(fitting_line))
+                recent_trend = fitting_line[-window_size:]
+                if len(recent_trend) >= 2:
+                    slope = (recent_trend[-1] - recent_trend[0]) / (len(recent_trend) - 1)
+                    current_trend_direction = "上升" if slope > 0 else "下降"
+
+            if current_trend_direction and "type" in signal and "z_score_mark" in signal:
+                # 推断历史信号的市场环境
+                signal_trend = None
+
+                # 基于信号类型和Z分数推断当时的趋势方向
+                if signal["type"] == "positive":  # 高于趋势线
+                    signal_trend = "上升" if signal["z_score_mark"] > 0 else "下降"
+                else:  # 负向信号
+                    signal_trend = "下降" if signal["z_score_mark"] < 0 else "上升"
+
+                # 趋势方向匹配时增加相似度
+                if signal_trend == current_trend_direction:
+                    market_similarity = 1.15  # 趋势方向相同
+                else:
+                    market_similarity = 0.9  # 趋势方向相反
+
+                # 进一步考虑Z分数相似性
+                if current_z_score is not None and "z_score_mark" in signal:
+                    # 信号类型相同且Z分数绝对值相近时，增加相似度
+                    if (current_z_score * signal["z_score_mark"] > 0 and  # 同号
+                            abs(abs(current_z_score) - abs(signal["z_score_mark"])) < 1.0):  # 幅度相近
+                        market_similarity *= 1.05  # 额外加分
+
+            # 6. 改进的信号强度相似性
             strength_similarity = 1.0
             if "strength" in signal:
                 strength_map = {"weak": 1, "medium": 2, "strong": 3}
@@ -301,33 +356,170 @@ def analyze_current_position(
 
                 if current_strength and signal["strength"]:
                     strength_diff = abs(strength_map.get(current_strength, 2) - strength_map.get(signal["strength"], 2))
-                    strength_similarity = 1.0 - (strength_diff * 0.2)
+                    # 使用指数函数使得差异更显著
+                    strength_similarity = np.exp(-0.4 * strength_diff)
 
-            # 7. 添加基础相似度以确保不会太低
-            base_similarity = 0.3
+            # 添加：7. 价格形态相似性（比较历史价格比率模式）
+            pattern_similarity = 1.0
+            if len(dates) > 0 and "date" in signal:
+                try:
+                    # 寻找信号在历史序列中的位置
+                    signal_index = dates.index(signal["date"])
 
-            # 8. 综合相似度得分并确保最终相似度不超过1.0
-            raw_similarity = base_similarity + (
-                    1 - base_similarity) * ratio_similarity * direction_match * time_weight * z_score_similarity * strength_similarity
-            res.append(round(raw_similarity, 2)) if raw_similarity > 0.95 else None
-            similarity = min(raw_similarity, 0.98)  # 限制最大相似度为0.98
+                    # 确保有足够的数据点进行比较
+                    if signal_index >= 10 and len(ratio) - 10 >= 0:
+                        # 提取历史信号前后的价格比率模式（共21个点，信号在中间）
+                        signal_pattern_start = max(0, signal_index - 10)
+                        signal_pattern_end = min(len(ratio), signal_index + 11)
+                        signal_pattern = ratio[signal_pattern_start:signal_pattern_end]
+
+                        # 提取当前比值前的价格比率模式
+                        current_pattern_end = len(ratio)
+                        current_pattern_start = max(0, current_pattern_end - 21)
+                        current_pattern = ratio[current_pattern_start:current_pattern_end]
+
+                        # 标准化两个模式以便比较形状而非绝对值
+                        if signal_pattern and current_pattern:
+                            norm_signal_pattern = [
+                                (x - min(signal_pattern)) / (max(signal_pattern) - min(signal_pattern) + 1e-10)
+                                for x in signal_pattern]
+                            norm_current_pattern = [
+                                (x - min(current_pattern)) / (max(current_pattern) - min(current_pattern) + 1e-10)
+                                for x in current_pattern]
+
+                            # 计算形态相似度（使用二者长度的较小值）
+                            min_length = min(len(norm_signal_pattern), len(norm_current_pattern))
+                            if min_length > 5:  # 确保有足够的点进行比较
+                                # 计算模式差异（均方根误差）
+                                pattern_diff_sum = sum((norm_signal_pattern[i] - norm_current_pattern[i]) ** 2
+                                                       for i in range(min_length))
+                                pattern_diff = (pattern_diff_sum / min_length) ** 0.5
+
+                                # 将差异转换为相似度值
+                                pattern_similarity = np.exp(-5 * pattern_diff)  # 指数衰减，差异越大，相似度越低
+                except (ValueError, IndexError):
+                    # 处理各种潜在异常，保持默认相似度
+                    pass
+
+            # 原来的基础相似度动态调整
+            base_similarity = 0.25
+
+            # 调整动态权重合成，加入新的形态相似性
+            total_weight = 4.0  # 更新权重总和
+
+            # 更新权重分配
+            ratio_weight = 1.1 / total_weight  # 比值相似度权重
+            position_weight = 0.8 / total_weight  # 位置相似度
+            direction_weight = 0.6 / total_weight  # 方向匹配
+            time_weight_factor = 0.5 / total_weight  # 时间因素
+            market_weight = 0.3 / total_weight  # 市场环境相似度
+            strength_weight = 0.1 / total_weight  # 信号强度相似度
+            pattern_weight = 0.6 / total_weight  # 新增：价格形态相似度
+
+            # 更新最终相似度计算
+            weighted_similarity = (
+                    base_similarity +
+                    (1 - base_similarity) * (
+                            ratio_similarity * ratio_weight +
+                            position_similarity * position_weight +
+                            direction_match * direction_weight +
+                            time_weight * time_weight_factor +
+                            market_similarity * market_weight +
+                            strength_similarity * strength_weight +
+                            pattern_similarity * pattern_weight
+                    )
+            )
+
+            # 对非常相似的信号进行记录（用于调试）
+            if weighted_similarity > 0.85:
+                res.append(round(weighted_similarity, 2))
+
+            # 限制最大相似度为0.95，保留一定区分度
+            similarity = min(weighted_similarity, 0.95)
+
             # 加入到待排序列表
             signal_similarities.append((signal, similarity))
+
         # 按相似度从高到低排序
         signal_similarities.sort(key=lambda x: x[1], reverse=True)
 
-        # 获取前3个最相似的信号（满足最低相似度要求）
+        # 优化获取最相似信号的策略，提高多样性和覆盖性
+        # 步骤1：先选择相似度最高的信号
+        selected_signals = []
+        unique_patterns = set()  # 用于跟踪已选择的信号模式类型
+
+        # 首先添加最相似的信号
+        if signal_similarities and signal_similarities[0][1] >= similarity_threshold:
+            top_signal = signal_similarities[0]
+            selected_signals.append(top_signal)
+            # 记录其类型和强度组合，用于确保多样性
+            if "type" in top_signal[0] and "strength" in top_signal[0]:
+                unique_patterns.add((top_signal[0]["type"], top_signal[0]["strength"]))
+
+        # 步骤2：遍历剩余信号，尝试添加不同类型/强度组合的信号
+        remaining_candidates = signal_similarities[1:] if signal_similarities else []
+        for signal_tuple in remaining_candidates:
+            if len(selected_signals) >= 3:  # 最多选3个信号
+                break
+
+            signal, sim = signal_tuple
+
+            # 只考虑达到阈值的信号
+            if sim < similarity_threshold:
+                continue
+
+            # 检查是否是新的类型/强度组合
+            if "type" in signal and "strength" in signal:
+                pattern_key = (signal["type"], signal["strength"])
+                if pattern_key not in unique_patterns:
+                    selected_signals.append(signal_tuple)
+                    unique_patterns.add(pattern_key)
+                    continue
+
+            # 如果还没有足够的信号，再检查时间跨度
+            # 优先选择与现有选择在时间上有显著差异的信号
+            if len(selected_signals) < 3 and "date" in signal:
+                # 检查与已选信号的时间差异
+                signal_date = signal["date"]
+                min_time_diff = float('inf')
+
+                for selected in selected_signals:
+                    if "date" in selected[0]:
+                        try:
+                            selected_date = selected[0]["date"]
+                            # 简化处理：计算日期字符串在排序中的距离
+                            date_diff = abs(dates.index(signal_date) - dates.index(selected_date))
+                            min_time_diff = min(min_time_diff, date_diff)
+                        except (ValueError, IndexError):
+                            continue
+
+                # 如果时间差异足够大(至少间隔30个交易日)，也加入选择
+                if min_time_diff > 30:
+                    selected_signals.append(signal_tuple)
+
+        # 步骤3：如果通过多样性筛选后仍未满足3个信号，则补充相似度最高的信号
+        if len(selected_signals) < 3:
+            for signal_tuple in remaining_candidates:
+                if len(selected_signals) >= 3:
+                    break
+
+                signal, sim = signal_tuple
+                # 避免重复添加
+                if signal_tuple not in selected_signals and sim >= similarity_threshold:
+                    selected_signals.append(signal_tuple)
+
+        # 将选择的信号转换为前端所需格式
         top_similar_signals = [
-                                  {
-                                      "id": s[0]["id"],
-                                      "date": s[0]["date"],
-                                      "ratio": s[0]["ratio"],
-                                      "similarity": float(s[1]),
-                                      "type": s[0]["type"],
-                                      "strength": s[0]["strength"]
-                                  }
-                                  for s in signal_similarities if s[1] >= similarity_threshold
-                              ][:3]
+            {
+                "id": s[0]["id"],
+                "date": s[0]["date"],
+                "ratio": s[0]["ratio"],
+                "similarity": float(s[1]),
+                "type": s[0]["type"],
+                "strength": s[0]["strength"]
+            }
+            for s in selected_signals
+        ]
 
         similar_signals = top_similar_signals
 
@@ -383,18 +575,18 @@ def analyze_current_position(
             historical_signal_pattern = "震荡切换"
         else:
             historical_signal_pattern = "混合模式"
-    
+
     # 10. 新增：计算趋势强度
     trend_strength = None
     if len(fitting_line) >= 2:
         # 使用拟合线的斜率计算趋势强度
         recent_window = min(30, len(fitting_line))
         recent_fit = fitting_line[-recent_window:]
-        
+
         if recent_window >= 2:
             trend_slope = (recent_fit[-1] - recent_fit[0]) / (recent_window - 1)
             trend_norm = abs(trend_slope) / mean_ratio  # 标准化斜率
-            
+
             # 根据标准化斜率确定趋势强度
             if trend_norm < 0.001:  # 几乎没有趋势
                 trend_strength = {
@@ -420,7 +612,7 @@ def analyze_current_position(
                     "level": "强趋势",
                     "direction": "上升" if trend_slope > 0 else "下降"
                 }
-    
+
     # 11. 新增：计算支撑位和阻力位
     support_resistance = None
     if len(ratio) >= 30:
@@ -428,77 +620,77 @@ def analyze_current_position(
         sorted_ratios = sorted(ratio)
         q1 = np.percentile(sorted_ratios, 25)  # 第一四分位数作为强支撑位
         q3 = np.percentile(sorted_ratios, 75)  # 第三四分位数作为强阻力位
-        
+
         # 找出最近的局部最低点作为近期支撑
         recent_window = min(60, len(ratio))
         recent_ratios = ratio[-recent_window:]
-        
+
         # 计算局部最小值和最大值（至少间隔5个点）
         local_mins = []
         local_maxs = []
         for i in range(5, len(recent_ratios) - 5):
-            if recent_ratios[i] == min(recent_ratios[i-5:i+6]):
+            if recent_ratios[i] == min(recent_ratios[i - 5:i + 6]):
                 local_mins.append(recent_ratios[i])
-            if recent_ratios[i] == max(recent_ratios[i-5:i+6]):
+            if recent_ratios[i] == max(recent_ratios[i - 5:i + 6]):
                 local_maxs.append(recent_ratios[i])
-        
+
         # 找出当前比值最近的支撑位和阻力位
         nearby_support = None
         nearby_resistance = None
-        
+
         if local_mins:
             # 找出低于当前比值的最高支撑位
             lower_supports = [r for r in local_mins if r < current_ratio]
             if lower_supports:
                 nearby_support = max(lower_supports)
-        
+
         if local_maxs:
             # 找出高于当前比值的最低阻力位
             higher_resistances = [r for r in local_maxs if r > current_ratio]
             if higher_resistances:
                 nearby_resistance = min(higher_resistances)
-        
+
         # 如果没有找到本地支撑/阻力位，使用统计分布
         if nearby_support is None:
             nearby_support = q1
         if nearby_resistance is None:
             nearby_resistance = q3
-            
+
         support_resistance = {
             "strong_support": round(float(q1), 3),
             "nearby_support": round(float(nearby_support), 3),
             "nearby_resistance": round(float(nearby_resistance), 3),
             "strong_resistance": round(float(q3), 3)
         }
-    
+
     # 12. 新增：计算均值回归概率
     mean_reversion_probability = None
     if current_z_score is not None:
         # 根据Z分数计算均值回归概率
         # Z分数越高，均值回归概率越大
-        if abs(current_z_score) > 2.5:
+        if abs(current_z_score) > 2.3:
             prob = 0.85  # 极端偏离，高概率回归
         elif abs(current_z_score) > 1.8:
-            prob = 0.7   # 显著偏离，较高概率回归
+            prob = 0.7  # 显著偏离，较高概率回归
         elif abs(current_z_score) > 1.0:
             prob = 0.55  # 中等偏离，中等概率回归
         else:
-            prob = 0.3   # 轻微偏离，低概率回归
-            
+            prob = 0.3  # 轻微偏离，低概率回归
+
         # 考虑趋势因素调整概率
         if trend_strength and trend_strength["level"] != "无明显趋势":
             trend_factor = 0.2 if trend_strength["level"] == "强趋势" else 0.1
-            
+
             # 如果偏离方向与趋势方向一致，降低回归概率；反之则提高
             if (current_z_score > 0 and trend_strength["direction"] == "上升") or \
-               (current_z_score < 0 and trend_strength["direction"] == "下降"):
+                    (current_z_score < 0 and trend_strength["direction"] == "下降"):
                 prob -= trend_factor
             else:
                 prob += trend_factor
-        
+
         # 确保概率在有效范围内
         mean_reversion_probability = max(0.1, min(0.95, prob))
-    
+
     # 13. 新增：分析在周期中的位置
     cycle_position = None
     if percentile is not None and trend_strength:
@@ -512,7 +704,7 @@ def analyze_current_position(
             position = "下降区域"
         else:
             position = "底部区域"
-            
+
         # 结合趋势方向
         if trend_strength["direction"] == "上升":
             if position in ["底部区域", "下降区域"]:
@@ -523,41 +715,41 @@ def analyze_current_position(
                 cycle_status = "上升周期接近尾声"
         elif trend_strength["direction"] == "下降":
             if position in ["顶部区域", "上升区域"]:
-                cycle_status = "可能开始新一轮下降周期" 
+                cycle_status = "可能开始新一轮下降周期"
             elif position in ["中间区域"]:
                 cycle_status = "处于下降周期中段"
             else:
                 cycle_status = "下降周期接近尾声"
         else:
             cycle_status = "当前处于盘整阶段"
-            
+
         cycle_position = {
             "position": position,
             "status": cycle_status
         }
 
-    # 14. 生成综合推荐建议（增强版）
+    # 14. 生成综合推荐建议
     recommendation = ""
 
     # 基于当前Z分数的极端值判断
     if is_extreme and current_z_score is not None:
         if current_z_score > 0:
             recommendation = f"当前比值处于历史高位(Z值:{current_z_score:.2f})，建议关注做空套利机会（卖出股票A或买入股票B）。"
-            
+
             # 添加均值回归概率信息
             if mean_reversion_probability:
                 recommendation += f" 均值回归概率约为{mean_reversion_probability:.0%}。"
-                
+
             # 添加支撑位信息
             if support_resistance:
                 recommendation += f" 注意防守{support_resistance['nearby_support']}的支撑位。"
         else:
             recommendation = f"当前比值处于历史低位(Z值:{current_z_score:.2f})，建议关注做多套利机会（买入股票A或卖出股票B）。"
-            
+
             # 添加均值回归概率信息
             if mean_reversion_probability:
                 recommendation += f" 均值回归概率约为{mean_reversion_probability:.0%}。"
-                
+
             # 添加阻力位信息
             if support_resistance:
                 recommendation += f" 上方{support_resistance['nearby_resistance']}可能存在阻力。"
@@ -566,25 +758,25 @@ def analyze_current_position(
     elif trend_strength and trend_strength["level"] != "无明显趋势":
         if trend_strength["direction"] == "上升" and deviation_from_trend and deviation_from_trend < -5:
             recommendation = f"当前比值低于上升趋势线，可能存在回归机会。考虑买入股票A或卖出股票B。价格比值处于{percentile:.0%}百分位水平。"
-            
+
             # 添加支撑阻力位信息
             if support_resistance:
                 recommendation += f" 近期支撑位:{support_resistance['nearby_support']}，阻力位:{support_resistance['nearby_resistance']}。"
         elif trend_strength["direction"] == "下降" and deviation_from_trend and deviation_from_trend > 5:
             recommendation = f"当前比值高于下降趋势线，可能存在回归机会。考虑卖出股票A或买入股票B。价格比值处于{percentile:.0%}百分位水平。"
-            
+
             # 添加支撑阻力位信息
             if support_resistance:
                 recommendation += f" 近期支撑位:{support_resistance['nearby_support']}，阻力位:{support_resistance['nearby_resistance']}。"
         elif abs(deviation_from_trend or 0) < 3:
             recommendation = f"当前比值贴近{trend_strength['level']}的{trend_strength['direction']}趋势线，建议顺势操作或观望。"
-            
+
             # 添加周期位置信息
             if cycle_position:
                 recommendation += f" {cycle_position['status']}。"
         else:
             recommendation = f"当前处于{trend_strength['level']}的{trend_strength['direction']}趋势中，"
-            
+
             if trend_strength["direction"] == "上升":
                 recommendation += f"整体偏多操作为宜。价格比值处于{percentile:.0%}百分位水平。"
             else:
@@ -597,7 +789,7 @@ def analyze_current_position(
             signal_desc = "超买" if nearest_signal["type"] == "positive" else "超卖"
             strength_desc = {"weak": "弱", "medium": "中等", "strong": "强"}[nearest_signal["strength"]]
             recommendation = f"当前比值与历史{nearest_signal['date']}的{signal_desc}信号高度相似(相似度:{similarity_score:.2f})，当时为{strength_desc}信号。参考历史表现，"
-            
+
             # 检查该信号的历史表现
             similar_signal_record = None
             for signal in signals:
@@ -609,7 +801,7 @@ def analyze_current_position(
                     else:
                         recommendation += "可能面临价格反弹。建议买入股票A或卖出股票B。"
                     break
-            
+
             # 如果无法获取历史表现，给出通用建议
             if "可能面临" not in recommendation:
                 recommendation += "注意关注后续价格走势的相似性。"
@@ -618,19 +810,19 @@ def analyze_current_position(
     elif historical_signal_pattern:
         if historical_signal_pattern == "连续超买" and percentile and percentile > 0.7:
             recommendation = "近期历史信号显示连续超买状态，当前比值位于较高位置，建议保持谨慎。"
-            
+
             # 添加支撑位信息
             if support_resistance:
                 recommendation += f" 若跌破{support_resistance['nearby_support']}支撑位，可能加速下跌。"
         elif historical_signal_pattern == "连续超卖" and percentile and percentile < 0.3:
             recommendation = "近期历史信号显示连续超卖状态，当前比值位于较低位置，可能存在机会。"
-            
+
             # 添加阻力位信息
             if support_resistance:
                 recommendation += f" 突破{support_resistance['nearby_resistance']}阻力位后，可能加速上涨。"
         elif historical_signal_pattern == "震荡切换":
             recommendation = "近期市场处于震荡状态，建议关注价格比值突破重要阈值的情况。"
-            
+
             # 添加支撑阻力区间
             if support_resistance:
                 recommendation += f" 当前交易区间可能在{support_resistance['nearby_support']}至{support_resistance['nearby_resistance']}之间。"
@@ -638,18 +830,18 @@ def analyze_current_position(
     # 没有明显信号时，基于周期位置和支撑阻力给出建议
     elif cycle_position:
         recommendation = f"当前比值在历史分布中处于{cycle_position['position']}，{cycle_position['status']}。"
-        
+
         if support_resistance:
             recommendation += f" 近期支撑位:{support_resistance['nearby_support']}，阻力位:{support_resistance['nearby_resistance']}。"
-            
+
         # 添加百分位信息
         if percentile is not None:
             recommendation += f" 价格比值处于{percentile:.0%}百分位水平。"
-    
+
     # 最后的兜底建议
     else:
         recommendation = "当前比值在历史正常范围内，暂无明显异常。建议继续观察市场动态。"
-        
+
         # 添加百分位信息
         if percentile is not None:
             recommendation += f" 价格比值处于{percentile:.0%}百分位水平。"
@@ -672,8 +864,8 @@ def analyze_current_position(
         "historical_signal_pattern": historical_signal_pattern,
         "trend_strength": trend_strength,
         "support_resistance": support_resistance,
-        "mean_reversion_probability": float(mean_reversion_probability) if mean_reversion_probability is not None else None,
+        "mean_reversion_probability": float(
+            mean_reversion_probability) if mean_reversion_probability is not None else None,
         "cycle_position": cycle_position,
         "recommendation": recommendation
     }
-

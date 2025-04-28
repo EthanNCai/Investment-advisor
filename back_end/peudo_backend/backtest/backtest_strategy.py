@@ -5,7 +5,10 @@ from typing import Dict, List, Any, Optional, Tuple, Union
 import math
 
 # 从现有模块导入函数
-from k_chart_fetcher import get_stock_data_pair, date_alignment
+from k_chart_fetcher import get_stock_data_pair, date_alignment, durations
+from indicators.investment_signals import analyze_current_position, generate_investment_signals
+
+from get_stock_data.stock_trends_base import StockTrendsDatabase
 
 
 class BacktestEngine:
@@ -38,6 +41,7 @@ class BacktestEngine:
                 - hedge_mode: 对冲模式 ('single'/'pair') 单边或双边交易
                 - risk_reward_ratio: 风险收益比 可选
                 - breakeven_stop: 是否使用保本止损 可选
+                - adaptive_threshold: 是否使用自适应阈值 可选
 
         返回:
             回测结果字典
@@ -65,6 +69,10 @@ class BacktestEngine:
             hedge_mode = params.get('hedge_mode', 'single')  # 对冲模式
             risk_reward_ratio = float(params.get('risk_reward_ratio', 2.0))  # 风险收益比
             breakeven_stop = params.get('breakeven_stop', False)  # 是否使用保本止损
+
+            # 新增自适应阈值参数
+            adaptive_threshold = params.get('adaptive_threshold', False)  # 是否使用自适应阈值
+            adaptive_period = int(params.get('adaptive_period', 60))  # 适应周期
 
             # 设置波动率窗口
             volatility_window = int(params.get('volatility_window', 20))
@@ -116,12 +124,44 @@ class BacktestEngine:
                 df['zscore'] = (df['ratio'] - df['ratio_ma']) / df['ratio_std']
                 df['signal'] = df['zscore']
 
+                # 自适应阈值调整
+                if adaptive_threshold:
+                    # 计算历史波动率百分位数
+                    df['vol_percentile'] = df['ratio_std'].rolling(window=adaptive_period).apply(
+                        lambda x: percentile_rank(x[-1], x), raw=True)
+
+                    # 根据波动率百分位调整入场和出场阈值
+                    df['adaptive_entry_threshold'] = entry_threshold * (1 + (df['vol_percentile'] - 0.5))
+                    df['adaptive_exit_threshold'] = exit_threshold * (1 + (df['vol_percentile'] - 0.5))
+
+                    # 记录调整后的阈值用于判断
+                    df['entry_threshold'] = df['adaptive_entry_threshold']
+                    df['exit_threshold'] = df['adaptive_exit_threshold']
+                else:
+                    # 使用固定阈值
+                    df['entry_threshold'] = entry_threshold
+                    df['exit_threshold'] = exit_threshold
+
             elif strategy_type == 'percent':
                 # 百分比偏离策略 - 相对于移动平均的偏离百分比
                 window = 60
                 df['ratio_ma'] = df['ratio'].rolling(window=window).mean()
                 df['percent_deviation'] = (df['ratio'] - df['ratio_ma']) / df['ratio_ma'] * 100
                 df['signal'] = df['percent_deviation'] / secondary_threshold  # 标准化信号
+
+                # 自适应阈值
+                if adaptive_threshold:
+                    # 计算历史偏离百分比的波动性
+                    df['dev_std'] = df['percent_deviation'].rolling(window=adaptive_period).std()
+                    df['vol_percentile'] = df['dev_std'].rolling(window=adaptive_period).apply(
+                        lambda x: percentile_rank(x[-1], x), raw=True)
+
+                    # 根据波动性调整阈值
+                    df['entry_threshold'] = entry_threshold * (1 + (df['vol_percentile'] - 0.5))
+                    df['exit_threshold'] = exit_threshold * (1 + (df['vol_percentile'] - 0.5))
+                else:
+                    df['entry_threshold'] = entry_threshold
+                    df['exit_threshold'] = exit_threshold
 
             elif strategy_type == 'volatility':
                 # 波动率调整策略 - 考虑市场波动率的Z分数
@@ -139,6 +179,19 @@ class BacktestEngine:
                 df['vol_adj_zscore'] = df['zscore'] * df['vol_adj_factor']
                 df['signal'] = df['vol_adj_zscore']
 
+                # 波动率策略天然带有自适应特性，但也可以增强
+                if adaptive_threshold:
+                    # 计算EWMA波动率，对近期波动更敏感
+                    df['ewma_vol'] = df['ratio_return'].ewm(span=vol_window).std() * np.sqrt(252)
+                    df['vol_ratio'] = df['ewma_vol'] / df['volatility'].rolling(window=adaptive_period).mean()
+
+                    # 根据当前波动率与历史平均的比例调整阈值
+                    df['entry_threshold'] = entry_threshold * np.sqrt(df['vol_ratio'])
+                    df['exit_threshold'] = exit_threshold * np.sqrt(df['vol_ratio'])
+                else:
+                    df['entry_threshold'] = entry_threshold
+                    df['exit_threshold'] = exit_threshold
+
             elif strategy_type == 'trend':
                 # 趋势跟踪策略 - 考虑价格比率的趋势方向
                 window = 60
@@ -152,8 +205,21 @@ class BacktestEngine:
                 df['short_ma'] = df['ratio'].rolling(window=short_window).mean()
                 df['long_ma'] = df['ratio'].rolling(window=long_window).mean()
                 df['trend'] = np.where(df['short_ma'] > df['long_ma'], 1, -1)
-                # 结合Z分数和趋势
-                df['signal'] = df['zscore'] * df['trend'] * secondary_threshold
+
+                # 计算趋势强度 - 短期均线与长期均线差值相对于长期均线的百分比
+                df['trend_strength'] = abs((df['short_ma'] - df['long_ma']) / df['long_ma'])
+
+                # 综合Z分数、趋势方向和趋势强度
+                df['signal'] = df['zscore'] * df['trend'] * (1 + df['trend_strength'] * secondary_threshold)
+
+                # 自适应阈值
+                if adaptive_threshold:
+                    # 根据趋势强度调整阈值
+                    df['entry_threshold'] = entry_threshold * (1 - df['trend_strength'] * 0.5)  # 趋势强时降低入场门槛
+                    df['exit_threshold'] = exit_threshold * (1 + df['trend_strength'])  # 趋势强时提高出场门槛
+                else:
+                    df['entry_threshold'] = entry_threshold
+                    df['exit_threshold'] = exit_threshold
 
             else:
                 # 默认使用Z分数策略
@@ -162,6 +228,8 @@ class BacktestEngine:
                 df['ratio_std'] = df['ratio'].rolling(window=window).std()
                 df['zscore'] = (df['ratio'] - df['ratio_ma']) / df['ratio_std']
                 df['signal'] = df['zscore']
+                df['entry_threshold'] = entry_threshold
+                df['exit_threshold'] = exit_threshold
 
             # 去除NaN值
             df = df.dropna().reset_index(drop=True)
@@ -211,7 +279,6 @@ class BacktestEngine:
                 # 更新当前持仓的价值
                 for j, pos in enumerate(current_positions):
                     if pos['asset'] == code_a:
-                        print('asset a')
                         pos['current_price'] = current_price_a
                         if pos['direction'] == 'long':
                             pos['pnl'] = (current_price_a - pos['entry_price']) / pos['entry_price'] * pos[
@@ -245,6 +312,9 @@ class BacktestEngine:
                 for j, pos in enumerate(current_positions):
                     close_reason = None
 
+                    # 获取该仓位的出场阈值（如果在开仓时记录了自适应阈值）
+                    pos_exit_threshold = pos.get('exit_threshold', exit_threshold)
+
                     # 1. 止损检查
                     if pos['pnl_percent'] <= -stop_loss:
                         close_reason = 'stop_loss'
@@ -263,17 +333,34 @@ class BacktestEngine:
                     elif time_stop > 0 and pos['holding_days'] >= time_stop:
                         close_reason = 'time_stop'
 
-                    # 5. 保本止损检查
-                    elif breakeven_stop and pos['pnl_percent'] < 0 and pos.get('highest_profit_percent', 0) >= 0.03:
-                        # 如果曾经盈利超过3%但现在跌至亏损，则平仓保本
-                        close_reason = 'breakeven_stop'
+                    # 5. 保本止损检查 - 优化点：根据持仓时间调整保本阈值
+                    elif breakeven_stop and pos['pnl_percent'] < 0:
+                        # 持仓时间越长，保本阈值越低
+                        breakeven_threshold = max(0.01, 0.03 - 0.002 * min(10, pos['holding_days']))
+                        if pos.get('highest_profit_percent', 0) >= breakeven_threshold:
+                            close_reason = 'breakeven_stop'
 
-                    # 6. 信号平仓检查
-                    elif ((pos['asset'] == code_a and pos[
-                        'direction'] == 'long' and current_signal >= -exit_threshold) or
-                          (pos['asset'] == code_a and pos[
-                              'direction'] == 'short' and current_signal <= exit_threshold)):
+                    # 6. 信号平仓检查 - 使用自适应阈值
+                    elif ((pos['asset'] == code_a and pos['direction'] == 'long' and
+                           current_signal >= -pos_exit_threshold) or
+                          (pos['asset'] == code_a and pos['direction'] == 'short' and
+                           current_signal <= pos_exit_threshold)):
                         close_reason = 'signal'
+
+                    # 7. 新增：风险加速平仓
+                    # 如果行情剧烈逆转，加速平仓
+                    elif (pos['asset'] == code_a and pos['direction'] == 'long' and
+                          current_signal > pos.get('entry_signal', 0) * 1.5) or \
+                            (pos['asset'] == code_a and pos['direction'] == 'short' and
+                             current_signal < pos.get('entry_signal', 0) * 1.5):
+                        close_reason = 'trend_reversal'
+
+                    # 8. 新增：最大亏损保护
+                    # 如果当前亏损超过历史平均亏损的2倍，提前平仓避免巨额亏损
+                    elif losing_trades > 5 and total_loss > 0:
+                        avg_loss_pct = total_loss / losing_trades / initial_capital * 100
+                        if pos['pnl_percent'] < 0 and abs(pos['pnl_percent']) > 2 * avg_loss_pct:
+                            close_reason = 'max_loss_protection'
 
                     # 如果满足任何平仓条件，将该仓位添加到平仓列表
                     if close_reason:
@@ -323,22 +410,48 @@ class BacktestEngine:
 
                 # 检查开仓信号
                 if len(current_positions) < max_positions:
+                    # 计算当前的适应性阈值
+                    current_entry_threshold = df['entry_threshold'].iloc[
+                        i] if 'entry_threshold' in df.columns else entry_threshold
+                    current_exit_threshold = df['exit_threshold'].iloc[
+                        i] if 'exit_threshold' in df.columns else exit_threshold
+
                     # 计算每个头寸的大小
                     if position_size_type == 'fixed':
                         position_amount = min(position_size, cash)
                     elif position_size_type == 'kelly':
-                        # 简化的Kelly公式实现
+                        # 改进的Kelly公式实现，加入风险加权
                         win_rate = profitable_trades / max(1, profitable_trades + losing_trades)
                         avg_win = total_profit / max(1, profitable_trades)
                         avg_loss = total_loss / max(1, losing_trades)
+
+                        # 计算当前市场波动率水平，用于风险加权
+                        volatility_factor = 1.0
+                        if 'volatility' in df.columns:
+                            current_vol = df['volatility'].iloc[i]
+                            avg_vol = df['volatility'].iloc[max(0, i - 20):i + 1].mean() if i >= 20 else current_vol
+                            if avg_vol > 0:
+                                volatility_factor = min(1.5, max(0.5, avg_vol / current_vol))
+
                         if avg_loss > 0:
+                            # 标准Kelly公式
                             kelly_f = win_rate - ((1 - win_rate) / (avg_win / avg_loss))
-                            kelly_f = max(0, min(0.5, kelly_f))  # 限制在0-50%之间，保守使用
+                            # 应用风险因子，高波动率时更保守
+                            kelly_f = kelly_f * volatility_factor
+                            # 保守限制，避免过度杠杆
+                            kelly_f = max(0, min(0.5, kelly_f))
                             position_amount = min(cash * kelly_f, cash)
                         else:
                             position_amount = min(cash * 0.1, cash)  # 默认使用10%
                     else:  # percent
-                        position_amount = min(cash * (position_size / 100), cash)
+                        # 考虑市场波动性动态调整仓位
+                        dynamic_position = position_size
+                        if 'volatility' in df.columns and i > 20:
+                            vol_ratio = df['volatility'].iloc[i] / df['volatility'].iloc[max(0, i - 20):i + 1].mean()
+                            # 波动率高于平均时减少仓位，低于平均时增加仓位
+                            dynamic_position = position_size * (2 - min(1.5, max(0.5, vol_ratio)))
+
+                        position_amount = min(cash * (dynamic_position / 100), cash)
 
                     # 如果有足够资金，检查开仓信号
                     if 0 < position_amount <= cash:
@@ -346,11 +459,27 @@ class BacktestEngine:
                         trade_signal = None
 
                         # 信号高于阈值，做空资产A（或做多资产B，取决于对冲模式）
-                        if current_signal > entry_threshold:
+                        if current_signal > current_entry_threshold:
                             trade_signal = 'short'
                         # 信号低于负阈值，做多资产A（或做空资产B）
-                        elif current_signal < -entry_threshold:
+                        elif current_signal < -current_entry_threshold:
                             trade_signal = 'long'
+
+                        # 风险过滤：检查是否满足风险收益比要求
+                        if trade_signal and risk_reward_ratio > 0:
+                            # 估计潜在收益
+                            potential_reward = abs(current_signal) / current_entry_threshold * take_profit
+                            # 计算风险（止损点）
+                            risk = stop_loss
+                            # 检查风险收益比是否满足要求
+                            if potential_reward / risk < risk_reward_ratio:
+                                trade_signal = None  # 风险收益比不满足，放弃交易
+
+                        # 额外的市场环境过滤
+                        if trade_signal and 'trend_strength' in df.columns:
+                            # 弱趋势环境下降低交易频率
+                            if df['trend_strength'].iloc[i] < 0.05 and np.random.random() > 0.5:
+                                trade_signal = None  # 50%概率放弃交易
 
                         if trade_signal:
                             # 扣除费用
@@ -371,7 +500,9 @@ class BacktestEngine:
                                         'position_size': actual_position / 2,  # 平分资金
                                         'pnl': -fee / 2,
                                         'pnl_percent': -fee / (actual_position / 2),
-                                        'entry_signal': current_signal
+                                        'entry_signal': current_signal,
+                                        'entry_threshold': current_entry_threshold,  # 记录开仓阈值
+                                        'exit_threshold': current_exit_threshold  # 记录平仓阈值
                                     })
 
                                     current_positions.append({
@@ -383,7 +514,9 @@ class BacktestEngine:
                                         'position_size': actual_position / 2,  # 平分资金
                                         'pnl': -fee / 2,
                                         'pnl_percent': -fee / (actual_position / 2),
-                                        'entry_signal': current_signal
+                                        'entry_signal': current_signal,
+                                        'entry_threshold': current_entry_threshold,
+                                        'exit_threshold': current_exit_threshold
                                     })
                                 else:
                                     # 做多A，做空B
@@ -396,7 +529,9 @@ class BacktestEngine:
                                         'position_size': actual_position / 2,  # 平分资金
                                         'pnl': -fee / 2,
                                         'pnl_percent': -fee / (actual_position / 2),
-                                        'entry_signal': current_signal
+                                        'entry_signal': current_signal,
+                                        'entry_threshold': current_entry_threshold,
+                                        'exit_threshold': current_exit_threshold
                                     })
 
                                     current_positions.append({
@@ -408,7 +543,9 @@ class BacktestEngine:
                                         'position_size': actual_position / 2,  # 平分资金
                                         'pnl': -fee / 2,
                                         'pnl_percent': -fee / (actual_position / 2),
-                                        'entry_signal': current_signal
+                                        'entry_signal': current_signal,
+                                        'entry_threshold': current_entry_threshold,
+                                        'exit_threshold': current_exit_threshold
                                     })
                             else:
                                 # 单边模式，只交易资产A
@@ -421,7 +558,9 @@ class BacktestEngine:
                                     'position_size': actual_position,
                                     'pnl': -fee,
                                     'pnl_percent': -fee / actual_position,
-                                    'entry_signal': current_signal
+                                    'entry_signal': current_signal,
+                                    'entry_threshold': current_entry_threshold,
+                                    'exit_threshold': current_exit_threshold
                                 })
 
                             # 更新现金
@@ -568,7 +707,7 @@ class BacktestEngine:
 
             # 计算卡尔马比率（年化收益/最大回撤）
             calmar_ratio = annual_return / max_drawdown if max_drawdown > 0 else 0
-
+            # print(f"trades:{trades}")
             # 构建回测结果
             backtest_result = {
                 'equity_curve': equity_curve,
@@ -618,101 +757,560 @@ class BacktestEngine:
                                     dates: List[str], lookback: int = 60) -> Dict[str, Any]:
         """
         计算最优入场和出场阈值
-        
+
         参数:
             prices_a: 资产A价格列表
             prices_b: 资产B价格列表
             dates: 对应日期列表
             lookback: 向后看的天数，用于计算
-            
+
         返回:
             包含最优阈值的字典
         """
-        # 计算价格比率
-        ratios = [a / b for a, b in zip(prices_a, prices_b)]
+        try:
+            # 计算价格比率
+            ratios = [a / b for a, b in zip(prices_a, prices_b)]
 
-        # 保存所有可能的阈值组合的结果
-        results = []
+            if len(ratios) < lookback * 2:
+                return {"error": "数据量不足，无法计算最优阈值"}
 
-        # 测试不同的入场/出场阈值组合
-        for entry_t in np.arange(1.0, 3.1, 0.1):
-            for exit_t in np.arange(0.1, min(entry_t, 1.1), 0.1):
-                # 模拟使用这些阈值的交易
-                trades = []
-                in_position = False
-                entry_price = 0
+            # 创建DataFrame便于分析
+            df = pd.DataFrame({
+                'date': dates,
+                'ratio': ratios,
+                'price_a': prices_a,
+                'price_b': prices_b
+            })
 
-                for i in range(lookback, len(ratios)):
-                    # 计算移动窗口的均值和标准差
-                    window = ratios[i - lookback:i]
-                    mean = np.mean(window)
-                    std = np.std(window)
+            # 计算基础指标
+            df['returns'] = df['ratio'].pct_change()
+            df['volatility'] = df['returns'].rolling(window=20).std() * np.sqrt(252)
 
-                    # 计算当前Z-score
-                    z_score = (ratios[i] - mean) / std if std > 0 else 0
+            # 保存所有可能的阈值组合的结果
+            results = []
 
-                    if not in_position:
-                        # 寻找入场点
-                        if abs(z_score) > entry_t:
-                            in_position = True
-                            entry_price = ratios[i]
-                            entry_date = dates[i]
-                            entry_zscore = z_score
-                    else:
-                        # 寻找出场点
-                        if abs(z_score) < exit_t:
-                            in_position = False
-                            exit_price = ratios[i]
-                            # 计算这笔交易的收益
-                            if entry_zscore > 0:  # 做空入场
-                                profit = entry_price - exit_price
-                            else:  # 做多入场
-                                profit = exit_price - entry_price
+            # 计算趋势指标
+            df['sma20'] = df['ratio'].rolling(window=20).mean()
+            df['sma50'] = df['ratio'].rolling(window=50).mean()
+            df['trend'] = np.where(df['sma20'] > df['sma50'], 1, -1)  # 1=上升趋势，-1=下降趋势
 
-                            profit_pct = profit / entry_price
+            # 确定市场环境类型
+            df['vol_percentile'] = df['volatility'].rolling(window=60).apply(
+                lambda x: percentile_rank(x[-1], x), raw=True).fillna(0.5)
 
-                            trades.append({
-                                'entry_date': entry_date,
-                                'exit_date': dates[i],
-                                'entry_zscore': entry_zscore,
-                                'exit_zscore': z_score,
-                                'profit': profit_pct
+            # 定义市场类型：低波动、正常、高波动
+            df['market_type'] = pd.cut(
+                df['vol_percentile'],
+                bins=[0, 0.33, 0.67, 1],
+                labels=['low_vol', 'normal', 'high_vol']
+            )
+
+            # 测试不同的入场/出场阈值组合 - 针对不同市场环境
+            for market_type in ['low_vol', 'normal', 'high_vol']:
+                market_df = df[df['market_type'] == market_type].copy() if len(df) > 60 else df
+
+                if len(market_df) < 30:  # 确保有足够的数据
+                    continue
+
+                # 为不同市场类型调整测试范围
+                if market_type == 'low_vol':
+                    entry_range = np.arange(1.0, 2.1, 0.1)  # 低波动市场用较低阈值
+                    exit_range = np.arange(0.1, 0.7, 0.1)
+                elif market_type == 'high_vol':
+                    entry_range = np.arange(2.0, 3.6, 0.2)  # 高波动市场用较高阈值
+                    exit_range = np.arange(0.5, 1.1, 0.1)
+                else:  # normal
+                    entry_range = np.arange(1.5, 3.1, 0.1)  # 正常市场用中等阈值
+                    exit_range = np.arange(0.3, 0.9, 0.1)
+
+                for entry_t in entry_range:
+                    for exit_t in exit_range:
+                        if exit_t >= entry_t:
+                            continue  # 出场阈值应小于入场阈值
+
+                        # 模拟使用这些阈值的交易
+                        trades = []
+                        in_position = False
+                        entry_price = 0
+                        max_drawdown = 0  # 跟踪最大回撤
+                        current_drawdown = 0
+                        peak_equity = 1.0  # 假设初始权益为1
+                        equity = 1.0
+
+                        for i in range(lookback, len(market_df)):
+                            # 计算移动窗口的均值和标准差
+                            window = market_df['ratio'].iloc[i - lookback:i]
+                            mean = np.mean(window)
+                            std = np.std(window)
+
+                            # 计算当前Z-score
+                            z_score = (market_df['ratio'].iloc[i] - mean) / std if std > 0 else 0
+
+                            # 获取当前趋势
+                            trend = market_df['trend'].iloc[i] if 'trend' in market_df.columns else 1
+
+                            if not in_position:
+                                # 寻找入场点 - 考虑趋势方向
+                                if (abs(z_score) > entry_t and
+                                        ((z_score > 0 and trend < 0) or  # 比值高且趋势向下
+                                         (z_score < 0 and trend > 0))):  # 比值低且趋势向上
+                                    in_position = True
+                                    entry_price = market_df['ratio'].iloc[i]
+                                    entry_date = market_df['date'].iloc[i]
+                                    entry_zscore = z_score
+                                    trade_equity = equity  # 记录开仓时的权益
+                            else:
+                                # 寻找出场点
+                                if abs(z_score) < exit_t:
+                                    in_position = False
+                                    exit_price = market_df['ratio'].iloc[i]
+                                    # 计算这笔交易的收益
+                                    if entry_zscore > 0:  # 做空入场
+                                        profit = entry_price - exit_price
+                                    else:  # 做多入场
+                                        profit = exit_price - entry_price
+
+                                    profit_pct = profit / entry_price
+
+                                    # 更新权益
+                                    equity *= (1 + profit_pct)
+
+                                    # 更新峰值权益和回撤
+                                    if equity > peak_equity:
+                                        peak_equity = equity
+                                    current_drawdown = (peak_equity - equity) / peak_equity
+                                    max_drawdown = max(max_drawdown, current_drawdown)
+
+                                    trades.append({
+                                        'entry_date': entry_date,
+                                        'exit_date': market_df['date'].iloc[i],
+                                        'entry_zscore': entry_zscore,
+                                        'exit_zscore': z_score,
+                                        'profit': profit_pct,
+                                        'equity': equity,
+                                        'drawdown': current_drawdown
+                                    })
+
+                                # 检查强制止损 (15% 止损)
+                                elif ((entry_zscore > 0 and (
+                                        exit_price - entry_price) / entry_price > 0.15) or  # 做空但上涨超过15%
+                                      (entry_zscore < 0 and (
+                                              entry_price - exit_price) / entry_price > 0.15)):  # 做多但下跌超过15%
+                                    in_position = False
+                                    exit_price = market_df['ratio'].iloc[i]
+
+                                    # 计算亏损
+                                    if entry_zscore > 0:  # 做空入场
+                                        profit = entry_price - exit_price
+                                    else:  # 做多入场
+                                        profit = exit_price - entry_price
+
+                                    profit_pct = profit / entry_price
+
+                                    # 更新权益
+                                    equity *= (1 + profit_pct)
+
+                                    # 更新回撤
+                                    current_drawdown = (peak_equity - equity) / peak_equity
+                                    max_drawdown = max(max_drawdown, current_drawdown)
+
+                                    trades.append({
+                                        'entry_date': entry_date,
+                                        'exit_date': market_df['date'].iloc[i],
+                                        'entry_zscore': entry_zscore,
+                                        'exit_zscore': z_score,
+                                        'profit': profit_pct,
+                                        'equity': equity,
+                                        'drawdown': current_drawdown,
+                                        'reason': 'stop_loss'
+                                    })
+
+                        # 计算策略绩效
+                        if trades:
+                            # 收益相关指标
+                            profits = [t['profit'] for t in trades]
+                            cum_profit = np.prod([1 + p for p in profits]) - 1
+                            avg_profit = np.mean(profits)
+                            win_rate = sum(1 for t in trades if t['profit'] > 0) / len(trades)
+
+                            # 计算盈亏比
+                            gains = [p for p in profits if p > 0]
+                            losses = [abs(p) for p in profits if p < 0]
+                            profit_factor = sum(gains) / abs(sum(losses)) if losses and sum(losses) != 0 else float(
+                                'inf')
+
+                            # 考虑回撤
+                            max_dd = max_drawdown
+
+                            # 计算卡尔马比率 (年化收益/最大回撤)
+                            calmar = cum_profit / max_dd if max_dd > 0 else float('inf')
+
+                            # 综合得分 - 权衡回报和风险
+                            # 优化目标：高胜率 + 高盈亏比 + 低回撤 + 适中交易频率
+                            score = (win_rate * 0.3 + profit_factor * 0.3 + calmar * 0.3 +
+                                     min(1, len(trades) / 50) * 0.1)  # 交易次数奖励，但最多占10%权重
+
+                            results.append({
+                                'market_type': market_type,
+                                'entry_threshold': float(entry_t),
+                                'exit_threshold': float(exit_t),
+                                'avg_profit': float(avg_profit),
+                                'win_rate': float(win_rate),
+                                'profit_factor': float(profit_factor),
+                                'trade_count': int(len(trades)),
+                                'max_drawdown': float(max_dd),
+                                'calmar_ratio': float(calmar),
+                                'cumulative_return': float(cum_profit),
+                                'score': float(score)
                             })
 
-                # 计算策略绩效
-                if trades:
-                    avg_profit = np.mean([t['profit'] for t in trades])
-                    win_rate = sum(1 for t in trades if t['profit'] > 0) / len(trades)
-                    profit_factor = sum(max(0, t['profit']) for t in trades) / abs(
-                        sum(min(0, t['profit']) for t in trades)) if sum(
-                        min(0, t['profit']) for t in trades) < 0 else float('inf')
+            # 如果没有结果，返回默认值
+            if not results:
+                return {
+                    "entry_threshold": 2.0,
+                    "exit_threshold": 0.5,
+                    "score": 0,
+                    "trade_count": 0,
+                    "error": "无法找到最优阈值，返回默认值"
+                }
 
-                    results.append({
-                        'entry_threshold': entry_t,
-                        'exit_threshold': exit_t,
-                        'avg_profit': avg_profit,
-                        'win_rate': win_rate,
-                        'profit_factor': profit_factor,
-                        'trade_count': len(trades),
-                        'score': avg_profit * win_rate * profit_factor  # 综合得分
+            # 根据得分排序
+            results.sort(key=lambda x: x['score'], reverse=True)
+
+            # 获取综合最优值
+            best_overall = results[0]
+
+            # 根据市场类型获取最优值
+            best_by_market = {}
+            for market_type in ['low_vol', 'normal', 'high_vol']:
+                market_results = [r for r in results if r['market_type'] == market_type]
+                if market_results:
+                    market_results.sort(key=lambda x: x['score'], reverse=True)
+                    best_by_market[market_type] = market_results[0]
+
+            # 构建返回结果
+            return {
+                "entry_threshold": best_overall['entry_threshold'],
+                "exit_threshold": best_overall['exit_threshold'],
+                "score": best_overall['score'],
+                "win_rate": best_overall['win_rate'],
+                "profit_factor": best_overall['profit_factor'],
+                "max_drawdown": best_overall['max_drawdown'],
+                "calmar_ratio": best_overall['calmar_ratio'],
+                "trade_count": best_overall['trade_count'],
+                "market_type": best_overall['market_type'],
+                "best_by_market": best_by_market,
+                "top_results": results[:5]  # 返回前5个最佳结果
+            }
+
+        except Exception as e:
+            import traceback
+            return {
+                "error": f"计算最优阈值时发生错误: {str(e)}",
+                "traceback": traceback.format_exc(),
+                "entry_threshold": 2.0,  # 返回默认值
+                "exit_threshold": 0.5
+            }
+
+    def run_similar_signals_backtest(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        运行基于投资信号相似度的回测策略
+
+        该策略仅对当前比值位置与历史上最相似的几个投资信号进行回测，
+        以验证当前投资机会的潜在表现。
+
+        参数:
+            params: 回测参数字典，包含：
+                - code_a: 资产A代码
+                - code_b: 资产B代码
+                - initial_capital: 初始资金
+                - position_size: 仓位大小(百分比)
+                - stop_loss: 止损比例(%)
+                - take_profit: 止盈比例(%)
+                - trading_fee: 交易费率
+                - polynomial_degree: 多项式拟合的次数
+                - threshold_multiplier: 信号生成的阈值乘数
+                - duration: 时间跨度 (1m, 3m, 1y, 2y, 5y, maximum)
+
+        返回:
+            回测结果字典，包含交易记录、资金曲线和性能指标
+        """
+        try:
+            # 1. 获取基本参数
+            code_a = params.get('code_a')
+            code_b = params.get('code_b')
+            initial_capital = float(params.get('initial_capital', 100000))
+            position_size = float(params.get('position_size', 30))  # 默认30%仓位
+            stop_loss = float(params.get('stop_loss', 5)) / 100  # 转换为小数
+            take_profit = float(params.get('take_profit', 10)) / 100  # 转换为小数
+            trading_fee = float(params.get('trading_fee', 0.0003))
+            polynomial_degree = int(params.get('polynomial_degree', 3))
+            threshold_multiplier = float(params.get('threshold_multiplier', 1.5))
+            duration = params.get('duration', '1y')  # 默认使用1年的时间跨度
+
+            # 2. 获取历史数据
+            close_a_, close_b_, dates_a_, dates_b_ = get_stock_data_pair(code_a, code_b)
+            close_a, close_b, dates = date_alignment(close_a_, close_b_, dates_a_, dates_b_)
+
+            if len(dates) < 60:
+                return {"error": "历史数据不足，无法进行回测。至少需要60个交易日的数据。"}
+
+            # 根据时间跨度截取数据
+            duration_days = durations.get(duration, -1)
+            if duration_days != -1 and duration_days < len(close_a):
+                close_a = close_a[-duration_days:]
+                close_b = close_b[-duration_days:]
+                dates = dates[-duration_days:]
+
+            # 3. 生成历史投资信号
+            signals = generate_investment_signals(
+                close_a=close_a,
+                close_b=close_b,
+                dates=dates,
+                degree=polynomial_degree,
+                threshold_multiplier=threshold_multiplier
+            )
+
+            if not signals:
+                return {"error": "未能生成有效的投资信号，无法进行回测。"}
+            # 获取当前最新价格趋势
+            db = StockTrendsDatabase()
+            trends_a = db.query_trends(stock_code=code_a)
+            trends_b = db.query_trends(stock_code=code_b)
+            # 4. 分析当前价格比值位置，找出最相似的信号
+            current_analysis = analyze_current_position(
+                code_a=code_a,
+                code_b=code_b,
+                close_a=close_a,
+                close_b=close_b,
+                dates=dates,
+                signals=signals,
+                trends_a=trends_a,
+                trends_b=trends_b,
+                degree=polynomial_degree
+            )
+
+            similar_signals = current_analysis.get("nearest_signals", [])
+            if not similar_signals:
+                return {"error": "未找到与当前价格比值相似的历史信号，无法进行回测。"}
+
+            # 5. 初始化回测结果
+            trades = []  # 交易记录
+            equity_curve = []  # 资金曲线
+            cash = initial_capital
+            equity = initial_capital
+            trade_id = 1
+
+            # 6. 针对每个相似信号进行回测
+            for signal in similar_signals:
+                try:
+                    signal_id = signal["id"]
+                    signal_date = signal["date"]
+                    similarity = signal["similarity"]
+                    signal_type = signal["type"]
+                    signal_strength = signal["strength"]
+
+                    # 查找原始信号的详细信息
+                    original_signal = next((s for s in signals if s["id"] == signal_id), None)
+                    if not original_signal:
+                        continue
+
+                    # 找到信号在历史数据中的位置
+                    try:
+                        signal_index = dates.index(signal_date)
+                    except ValueError:
+                        continue
+
+                    # 确保有足够的后续数据进行回测（至少30天）
+                    if signal_index + 30 >= len(dates):
+                        continue
+
+                    # 确定交易方向
+                    direction = "short" if signal_type == "positive" else "long"
+
+                    # 确定仓位大小（根据信号强度和相似度调整）
+                    strength_factor = {"weak": 0.7, "medium": 1.0, "strong": 1.3}.get(signal_strength, 1.0)
+                    similarity_factor = min(1.0, similarity * 1.1)  # 相似度越高，仓位越大
+                    position_percent = position_size * strength_factor * similarity_factor / 100
+                    position_amount = min(cash * position_percent, cash)
+
+                    # 计算交易费用
+                    fee = position_amount * trading_fee
+                    actual_position = position_amount - fee
+
+                    # 入场价格
+                    entry_price_a = close_a[signal_index]
+                    entry_price_b = close_b[signal_index]
+
+                    # 记录入场交易
+                    entry_date = dates[signal_index]
+                    entry_ratio = entry_price_a / entry_price_b
+
+                    # 更新资金
+                    cash -= position_amount
+
+                    # 追踪价格变化和盈亏
+                    max_profit = 0
+                    max_loss = 0
+                    exit_index = None
+                    exit_reason = None
+
+                    # 模拟后续交易日
+                    for i in range(signal_index + 1, min(signal_index + 60, len(dates))):
+                        current_price_a = close_a[i]
+                        current_price_b = close_b[i]
+                        current_ratio = current_price_a / current_price_b
+
+                        # 计算盈亏
+                        if direction == "long":  # 做多比值（买A卖B）
+                            pnl_percent = (current_ratio - entry_ratio) / entry_ratio
+                        else:  # 做空比值（卖A买B）
+                            pnl_percent = (entry_ratio - current_ratio) / entry_ratio
+
+                        # 追踪最大盈亏
+                        if pnl_percent > max_profit:
+                            max_profit = pnl_percent
+                        if pnl_percent < max_loss:
+                            max_loss = pnl_percent
+
+                        # 检查平仓条件
+                        # 1. 止损
+                        if pnl_percent <= -stop_loss:
+                            exit_index = i
+                            exit_reason = "止损"
+                            break
+
+                        # 2. 止盈
+                        if pnl_percent >= take_profit:
+                            exit_index = i
+                            exit_reason = "止盈"
+                            break
+
+                        # 3. 自适应跟踪止损 - 高收益时保护利润
+                        if max_profit >= take_profit * 0.7 and pnl_percent <= max_profit * 0.6:
+                            exit_index = i
+                            exit_reason = "跟踪止损"
+                            break
+
+                        # 4. 最长持仓时间（30天）
+                        if i - signal_index >= 30:
+                            exit_index = i
+                            exit_reason = "时间到期"
+                            break
+
+                    # 如果没有触发任何平仓条件，使用最后一个可用数据点
+                    if exit_index is None:
+                        exit_index = min(signal_index + 30, len(dates) - 1)
+                        exit_reason = "时间到期"
+
+                    # 计算最终盈亏
+                    exit_price_a = close_a[exit_index]
+                    exit_price_b = close_b[exit_index]
+                    exit_ratio = exit_price_a / exit_price_b
+                    exit_date = dates[exit_index]
+
+                    if direction == "long":
+                        final_pnl_percent = (exit_ratio - entry_ratio) / entry_ratio
+                    else:
+                        final_pnl_percent = (entry_ratio - exit_ratio) / entry_ratio
+
+                    final_pnl = actual_position * final_pnl_percent
+
+                    # 平仓交易费
+                    exit_fee = (actual_position + final_pnl) * trading_fee
+                    final_pnl -= exit_fee
+
+                    # 更新资金
+                    cash += actual_position + final_pnl
+
+                    # 记录交易
+                    trades.append({
+                        'id': trade_id,
+                        'entry_date': entry_date,
+                        'exit_date': exit_date,
+                        'holding_days': exit_index - signal_index,
+                        'entry_ratio': entry_ratio,
+                        'exit_ratio': exit_ratio,
+                        'direction': direction,
+                        'position_size': actual_position,
+                        'pnl': final_pnl,
+                        'pnl_percent': final_pnl_percent * 100,  # 转为百分比显示
+                        'exit_reason': exit_reason,
+                        'similar_signal_id': signal_id,
+                        'similarity': similarity
                     })
 
-        # 按综合得分排序
-        results.sort(key=lambda x: x['score'], reverse=True)
+                    trade_id += 1
 
-        # 返回最佳结果
-        if results:
-            best_result = results[0]
+                    # 更新权益
+                    equity = cash
+
+                except Exception as e:
+                    print(f"处理信号{signal_id}时发生错误: {str(e)}")
+                    continue
+
+            # 7. 计算回测性能指标
+            final_equity = cash
+            total_return = (final_equity - initial_capital) / initial_capital * 100
+
+            # 统计盈亏
+            profitable_trades = sum(1 for t in trades if t['pnl'] > 0)
+            total_trades = len(trades)
+            win_rate = profitable_trades / total_trades if total_trades > 0 else 0
+
+            # 计算平均盈亏
+            avg_profit = sum(
+                t['pnl'] for t in trades if t['pnl'] > 0) / profitable_trades if profitable_trades > 0 else 0
+            avg_loss = sum(abs(t['pnl']) for t in trades if t['pnl'] <= 0) / (
+                    total_trades - profitable_trades) if total_trades - profitable_trades > 0 else 0
+            profit_loss_ratio = avg_profit / avg_loss if avg_loss > 0 else 0
+
+            # 计算平均持仓时间
+            avg_holding_days = sum(t['holding_days'] for t in trades) / total_trades if total_trades > 0 else 0
+
+            # 生成资金曲线数据
+            portfolio_value_history = []
+
+            # 按日期排序交易记录
+            sorted_trades = sorted(trades, key=lambda x: x['entry_date'])
+
+            # 添加初始资金点
+            portfolio_value_history.append({
+                'date': sorted_trades[0]['entry_date'] if sorted_trades else dates[-1],
+                'portfolio_value': initial_capital
+            })
+
+            # 累积每笔交易后的资金变化
+            current_value = initial_capital
+            for trade in sorted_trades:
+                current_value += trade['pnl']
+                portfolio_value_history.append({
+                    'date': trade['exit_date'],
+                    'portfolio_value': current_value
+                })
+
+            # 返回回测结果
             return {
-                'optimal_entry_threshold': best_result['entry_threshold'],
-                'optimal_exit_threshold': best_result['exit_threshold'],
-                'expected_win_rate': best_result['win_rate'],
-                'expected_avg_profit': best_result['avg_profit'],
-                'profit_factor': best_result['profit_factor'],
-                'trade_count': best_result['trade_count'],
-                'all_results': results[:5]  # 返回前5个最佳结果
+                "trades": trades,
+                "initial_capital": initial_capital,
+                "final_equity": final_equity,
+                "total_return": total_return,
+                "total_trades": total_trades,
+                "profitable_trades": profitable_trades,
+                "win_rate": win_rate * 100,  # 转为百分比显示
+                "profit_loss_ratio": profit_loss_ratio,
+                "avg_holding_days": avg_holding_days,
+                "current_analysis": current_analysis,
+                "similar_signals": similar_signals,
+                "portfolio_value_history": portfolio_value_history  # 添加资金曲线数据
             }
-        else:
-            return {
-                'error': '无法计算最优阈值，数据不足或其他问题'
-            }
+
+        except Exception as e:
+            return {"error": f"执行回测时发生错误: {str(e)}"}
+
+
+def percentile_rank(x, values):
+    """计算x在values中的百分位排名 (0-1)"""
+    if len(values) == 0:
+        return 0.5
+    return sum(1 for val in values if val < x) / len(values)

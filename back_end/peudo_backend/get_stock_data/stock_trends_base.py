@@ -7,12 +7,33 @@ from back_end.peudo_backend.get_stock_data.get_stock_trends_data import StockTre
 
 
 class StockTrendsDatabase:
-    def __init__(self, db_path='stock_kline_data.db'):
-        pass  # 单例模式下由__new__初始化
+    def __init__(self, db_path='stock_kline_data.db', conn=None):
+        """
+        初始化股票趋势数据库
+        
+        参数:
+            db_path: 数据库路径，默认为当前目录下的stock_kline_data.db
+            conn: 可选的外部数据库连接，如果提供则使用该连接
+        """
+        # 如果提供了外部连接，则使用该连接
+        if conn:
+            self.conn = conn
+            self.is_external_conn = True
+            self._create_trends_table()  # 确保趋势表存在
+        else:
+            # 否则使用单例模式
+            self.is_external_conn = False
+            pass  # 单例模式下由__new__初始化
 
     _instance = None  # 单例控制
 
-    def __new__(cls, db_path=None):
+    def __new__(cls, db_path=None, conn=None):
+        # 如果传入了外部连接，不使用单例模式
+        if conn:
+            instance = super().__new__(cls)
+            return instance
+            
+        # 使用单例模式
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             # 初始化数据库连接，使用与K线数据相同的数据库文件
@@ -20,6 +41,7 @@ class StockTrendsDatabase:
             default_db = project_root / "stock_kline_data.db"
             default_db.parent.mkdir(exist_ok=True, parents=True)
             cls._instance.conn = sqlite3.connect(str(default_db))
+            cls._instance.is_external_conn = False
             cls._instance._setup_database()
         return cls._instance
 
@@ -205,8 +227,8 @@ class StockTrendsDatabase:
             return False
 
     def close(self):
-        """关闭数据库连接"""
-        if hasattr(self, 'conn'):
+        """关闭数据库连接，但只有当连接不是外部提供的时候才关闭"""
+        if hasattr(self, 'conn') and not self.is_external_conn:
             self.conn.close()
 
 

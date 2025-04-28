@@ -35,7 +35,12 @@ interface SignalPerformanceStats {
   };
 }
 
-const SignalStatsCard: React.FC = () => {
+interface SignalStatsCardProps {
+  codeA?: string;
+  codeB?: string;
+}
+
+const SignalStatsCard: React.FC<SignalStatsCardProps> = ({ codeA, codeB }) => {
   const [stats, setStats] = useState<SignalPerformanceStats | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,12 +48,18 @@ const SignalStatsCard: React.FC = () => {
   // 加载统计数据
   useEffect(() => {
     fetchStats();
-  }, []);
+  }, [codeA, codeB]);
   
   const fetchStats = async () => {
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:8000/signal_performance_stats/');
+      // 构建URL，根据是否有股票代码增加查询参数
+      let url = 'http://localhost:8000/signal_performance_stats/';
+      if (codeA && codeB) {
+        url += `?code_a=${codeA}&code_b=${codeB}`;
+      }
+      
+      const response = await fetch(url);
       
       if (!response.ok) {
         throw new Error('获取信号统计数据失败');

@@ -3,7 +3,6 @@ import sys
 from datetime import datetime
 
 
-
 # 添加项目根目录到python路径
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.abspath(os.path.join(current_dir, "../../../"))
@@ -14,9 +13,8 @@ sys.path.append(peudo_backend_dir)
 
 
 # 现在使用相对于项目根目录或peudo_backend目录的导入路径
-from get_stock_data.stock_data_base import StockKlineDatabase
 
-from k_chart_fetcher import get_stock_data_pair, date_alignment
+from indicators.signal_evaluator import load_signal_records
 
 
 if __name__ == '__main__':

@@ -198,10 +198,10 @@ def evaluate_market_condition(
     
     # 2. Z值稳定性影响(0-15分)
     z_score = abs(signal["z_score"])
-    if 1.5 <= z_score <= 3.0:
+    if 1.5 <= z_score <= 2.5:
         # 适中的Z值最有可能回归均值
         z_score_factor = 15
-    elif z_score > 3.0:
+    elif z_score > 2.5:
         # 极端值可能是异常，但也可能意味着强趋势
         z_score_factor = 8
     else:
@@ -571,14 +571,22 @@ def update_signal_performance(
     return target_record
 
 
-def get_signal_performance_stats() -> Dict[str, Any]:
+def get_signal_performance_stats(code_a: str = None, code_b: str = None) -> Dict[str, Any]:
     """
     获取信号表现统计数据
+    
+    参数:
+        code_a: 可选，股票A代码，用于筛选特定股票对
+        code_b: 可选，股票B代码，用于筛选特定股票对
     
     返回:
         信号表现统计报告
     """
     records = load_signal_records()
+    
+    # 如果指定了股票代码，则筛选相关记录
+    if code_a and code_b:
+        records = [r for r in records if r["code_a"] == code_a and r["code_b"] == code_b]
     
     # 过滤已完成验证的记录
     validated_records = [r for r in records if r["validation_completed"]]

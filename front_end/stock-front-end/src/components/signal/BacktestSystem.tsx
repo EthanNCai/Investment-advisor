@@ -1,8 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, Typography, Row, Col, Form, Input, Button, InputNumber, Select, Divider, Spin, Alert, Tabs, Switch, Tooltip, Space, message } from 'antd';
-import { QuestionCircleOutlined, SettingOutlined, LineChartOutlined, TableOutlined, InfoCircleOutlined } from '@ant-design/icons';
+import { QuestionCircleOutlined, SettingOutlined, LineChartOutlined, TableOutlined, InfoCircleOutlined, BarChartOutlined } from '@ant-design/icons';
 import BacktestResults from './BacktestResults';
 import BacktestTradesList from './BacktestTradesList';
+import SimilarSignalsBacktestResults from './SimilarSignalsBacktestResults';
+import axios from 'axios';
+import moment from 'moment';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -48,6 +51,8 @@ interface BacktestParams {
   secondary_threshold: number;
   volatility_window: number;
   trend_window: number;
+  adaptive_threshold: boolean; // 是否启用自适应阈值
+  adaptive_period: number; // 自适应周期
 }
 
 // 回测结果接口
@@ -109,11 +114,59 @@ interface BacktestResult {
   error?: string;
 }
 
+// 相似信号回测参数接口
+interface SimilarSignalsBacktestParams {
+  code_a: string;
+  code_b: string;
+  initial_capital: number;
+  position_size: number;
+  stop_loss: number;
+  take_profit: number;
+  trading_fee: number;
+  polynomial_degree: number;
+  threshold_multiplier: number;
+  duration: string; // 添加时间跨度参数
+}
+
+// 相似信号回测结果接口
+interface SimilarSignalsBacktestResult {
+  trades: {
+    id: number;
+    entry_date: string;
+    exit_date: string;
+    holding_days: number;
+    entry_ratio: number;
+    exit_ratio: number;
+    direction: string;
+    position_size: number;
+    pnl: number;
+    pnl_percent: number;
+    exit_reason: string;
+    similar_signal_id: number;
+    similarity: number;
+  }[];
+  initial_capital: number;
+  final_equity: number;
+  total_return: number;
+  total_trades: number;
+  profitable_trades: number;
+  win_rate: number;
+  profit_loss_ratio: number;
+  avg_holding_days: number;
+  current_analysis: any;
+  similar_signals: any[];
+  error?: string;
+}
+
 const BacktestSystem: React.FC<BacktestSystemProps> = ({ codeA, codeB, signals }) => {
   const [form] = Form.useForm();
+  const [similarSignalsForm] = Form.useForm();
   const [loading, setLoading] = useState<boolean>(false);
+  const [similarSignalsLoading, setSimilarSignalsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [similarSignalsError, setSimilarSignalsError] = useState<string | null>(null);
   const [backtestResults, setBacktestResults] = useState<BacktestResult | null>(null);
+  const [similarSignalsResults, setSimilarSignalsResults] = useState<SimilarSignalsBacktestResult | null>(null);
   const [activeTab, setActiveTab] = useState<string>("1");
   const [showAdvancedOptions, setShowAdvancedOptions] = useState<boolean>(false);
   const [strategyType, setStrategyType] = useState<string>("zscore");
@@ -164,7 +217,9 @@ const BacktestSystem: React.FC<BacktestSystemProps> = ({ codeA, codeB, signals }
       hedge_mode: 'single',
       secondary_threshold: 1.0,
       volatility_window: 20,
-      trend_window: 50
+      trend_window: 50,
+      adaptive_threshold: false,
+      adaptive_period: 60
     });
   }, [codeA, codeB, minDate, maxDate]);
 
@@ -266,6 +321,68 @@ const BacktestSystem: React.FC<BacktestSystemProps> = ({ codeA, codeB, signals }
       setOptimalThresholdLoading(false);
     }
   };
+
+  // 运行相似信号回测
+  const runSimilarSignalsBacktest = async (values: SimilarSignalsBacktestParams) => {
+    setSimilarSignalsLoading(true);
+    setSimilarSignalsError(null);
+    
+    try {
+      // 确保股票代码被包含在请求中
+      const backtestParams = {
+        ...values,
+        code_a: codeA,
+        code_b: codeB
+      };
+      
+      console.log('相似信号回测参数:', backtestParams);
+      
+      const response = await fetch('http://localhost:8000/backtest_similar_signals/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(backtestParams),
+      });
+      
+      if (!response.ok) {
+        throw new Error('相似信号回测失败，请检查参数后重试');
+      }
+      
+      const data = await response.json();
+      
+      if (data.error) {
+        setSimilarSignalsError(data.error);
+        return;
+      }
+      
+      setSimilarSignalsResults(data);
+      setActiveTab("4"); // 自动切换到相似信号结果标签页
+    } catch (err) {
+      console.error('相似信号回测错误:', err);
+      setSimilarSignalsError(err instanceof Error ? err.message : '执行相似信号回测时发生错误');
+    } finally {
+      setSimilarSignalsLoading(false);
+    }
+  };
+
+  const handleSimilarSignalsFormFinish = (values: any) => {
+    runSimilarSignalsBacktest(values);
+  };
+
+  // 初始化相似信号回测表单默认值
+  useEffect(() => {
+    similarSignalsForm.setFieldsValue({
+      initial_capital: 100000,
+      position_size: 20,
+      stop_loss: 5,
+      take_profit: 10,
+      trading_fee: 0.0003,
+      polynomial_degree: 3,
+      threshold_multiplier: 1.5,
+      duration: '1y'
+    });
+  }, []);
 
   return (
     <Card title="价差交易策略回测" bordered={false}>
@@ -518,6 +635,32 @@ const BacktestSystem: React.FC<BacktestSystemProps> = ({ codeA, codeB, signals }
               
               <Col span={24}>
                 <Divider />
+                <Title level={5}>高级策略选项</Title>
+              </Col>
+
+              <Col span={8}>
+                <Form.Item
+                  name="adaptive_threshold"
+                  label="自适应阈值"
+                  tooltip="根据市场波动性自动调整入场和出场阈值"
+                  valuePropName="checked"
+                >
+                  <Switch />
+                </Form.Item>
+              </Col>
+
+              <Col span={8}>
+                <Form.Item
+                  name="adaptive_period"
+                  label="适应周期(天)"
+                  tooltip="计算自适应阈值的历史周期长度"
+                >
+                  <InputNumber min={20} max={120} step={10} style={{ width: '100%' }} />
+                </Form.Item>
+              </Col>
+              
+              <Col span={24}>
+                <Divider />
                 <Row align="middle">
                   <Col span={12}>
                     <Title level={5}>风险管理</Title>
@@ -659,6 +802,216 @@ const BacktestSystem: React.FC<BacktestSystemProps> = ({ codeA, codeB, signals }
               <Text type="secondary">请先运行回测</Text>
             </div>
           )}
+        </TabPane>
+        
+        <TabPane 
+          tab={<span><BarChartOutlined /> 相似信号回测</span>} 
+          key="4"
+        >
+          <Row gutter={[24, 24]}>
+            <Col span={24}>
+              <Alert
+                message="基于相似历史信号的回测"
+                description="此功能基于当前价格比值位置找出历史上最相似的信号，并模拟这些信号在当时的交易效果，帮助您理解当前投资机会。"
+                type="info"
+                showIcon
+              />
+            </Col>
+            
+            <Col span={similarSignalsResults ? 6 : 24}>
+              <Form
+                form={similarSignalsForm}
+                layout="vertical"
+                onFinish={handleSimilarSignalsFormFinish}
+              >
+                <Row gutter={[16, 0]}>
+                  <Col span={24}>
+                    <Form.Item
+                      name="initial_capital"
+                      label="初始资金"
+                      rules={[{ required: true, message: '请输入初始资金' }]}
+                    >
+                      <InputNumber
+                        style={{ width: '100%' }}
+                        min={1000}
+                        max={10000000}
+                      />
+                    </Form.Item>
+                  </Col>
+                  
+                  <Col span={24}>
+                    <Form.Item
+                      name="position_size"
+                      label={
+                        <span>
+                          仓位大小(%) 
+                          <Tooltip title="每笔交易使用的资金百分比">
+                            <QuestionCircleOutlined style={{ marginLeft: 4 }} />
+                          </Tooltip>
+                        </span>
+                      }
+                      rules={[{ required: true, message: '请输入仓位大小' }]}
+                    >
+                      <InputNumber
+                        style={{ width: '100%' }}
+                        min={1}
+                        max={100}
+                      />
+                    </Form.Item>
+                  </Col>
+                </Row>
+                
+                <Row gutter={[16, 0]}>
+                  <Col span={24}>
+                    <Form.Item
+                      name="stop_loss"
+                      label="止损比例(%)"
+                      rules={[{ required: true, message: '请输入止损比例' }]}
+                    >
+                      <InputNumber
+                        style={{ width: '100%' }}
+                        min={0.1}
+                        max={50}
+                        step={0.1}
+                      />
+                    </Form.Item>
+                  </Col>
+                  
+                  <Col span={24}>
+                    <Form.Item
+                      name="take_profit"
+                      label="止盈比例(%)"
+                      rules={[{ required: true, message: '请输入止盈比例' }]}
+                    >
+                      <InputNumber
+                        style={{ width: '100%' }}
+                        min={0.1}
+                        max={50}
+                        step={0.1}
+                      />
+                    </Form.Item>
+                  </Col>
+                </Row>
+                
+                <Row gutter={[16, 0]}>
+                  <Col span={24}>
+                    <Form.Item
+                      name="polynomial_degree"
+                      label={
+                        <span>
+                          多项式拟合次数 
+                          <Tooltip title="用于拟合价格比值曲线的多项式次数，较高的值能捕捉更复杂的曲线形状">
+                            <QuestionCircleOutlined style={{ marginLeft: 4 }} />
+                          </Tooltip>
+                        </span>
+                      }
+                      rules={[{ required: true, message: '请输入多项式拟合次数' }]}
+                    >
+                      <InputNumber
+                        style={{ width: '100%' }}
+                        min={1}
+                        max={10}
+                        step={1}
+                      />
+                    </Form.Item>
+                  </Col>
+                  
+                  <Col span={24}>
+                    <Form.Item
+                      name="threshold_multiplier"
+                      label={
+                        <span>
+                          信号阈值系数 
+                          <Tooltip title="用于生成投资信号的阈值乘数，较高的值会产生更少但更可靠的信号">
+                            <QuestionCircleOutlined style={{ marginLeft: 4 }} />
+                          </Tooltip>
+                        </span>
+                      }
+                      rules={[{ required: true, message: '请输入阈值系数' }]}
+                    >
+                      <InputNumber
+                        style={{ width: '100%' }}
+                        min={1}
+                        max={5}
+                        step={0.1}
+                      />
+                    </Form.Item>
+                  </Col>
+                </Row>
+                
+                <Row gutter={[16, 0]}>
+                  <Col span={24}>
+                    <Form.Item
+                      name="duration"
+                      label="时间跨度"
+                      tooltip="选择历史数据分析的时间范围"
+                      rules={[{ required: true, message: '请选择时间跨度' }]}
+                    >
+                      <Select>
+                        <Option value="1m">1个月</Option>
+                        <Option value="3m">3个月</Option>
+                        <Option value="1y">1年</Option>
+                        <Option value="2y">2年</Option>
+                        <Option value="5y">5年</Option>
+                        <Option value="maximum">全部</Option>
+                      </Select>
+                    </Form.Item>
+                  </Col>
+                </Row>
+                
+                <Form.Item
+                  name="trading_fee"
+                  label="交易费率"
+                  rules={[{ required: true, message: '请输入交易费率' }]}
+                >
+                  <InputNumber
+                    style={{ width: '100%' }}
+                    min={0}
+                    max={0.01}
+                    step={0.0001}
+                    precision={6}
+                  />
+                </Form.Item>
+                
+                <Form.Item>
+                  <Button
+                    type="primary"
+                    htmlType="submit"
+                    loading={similarSignalsLoading}
+                    icon={<LineChartOutlined />}
+                    block
+                  >
+                    运行相似信号回测
+                  </Button>
+                </Form.Item>
+              </Form>
+              
+              {similarSignalsError && (
+                <Alert
+                  message="回测错误"
+                  description={similarSignalsError}
+                  type="error"
+                  showIcon
+                  style={{ marginTop: 16 }}
+                />
+              )}
+            </Col>
+            
+            {similarSignalsResults && (
+              <Col span={18}>
+                <SimilarSignalsBacktestResults 
+                  results={similarSignalsResults} 
+                  loading={similarSignalsLoading} 
+                  stockPair={{
+                    codeA: codeA,
+                    nameA: codeA, // 这里应当从全局状态获取股票名称，临时用代码代替
+                    codeB: codeB,
+                    nameB: codeB, // 这里应当从全局状态获取股票名称，临时用代码代替
+                  }}
+                />
+              </Col>
+            )}
+          </Row>
         </TabPane>
       </Tabs>
     </Card>

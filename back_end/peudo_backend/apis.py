@@ -2,28 +2,19 @@ import json
 import traceback
 from datetime import datetime, timedelta
 # import torch
-from typing import List, Dict, Optional, Any, Union
+from typing import List, Dict
 
-import numpy as np
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Cookie, Response, Request, Form
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-import pandas as pd
 
-from get_stock_data.auto_update_trends import start_auto_update_services
+# 导入回测引擎
+from backtest.backtest_strategy import BacktestEngine
 from get_stock_data.get_stock_trends_data import StockTrendsData
 from get_stock_data.stock_data_base import StockKlineDatabase
 from get_stock_data.stock_trends_base import StockTrendsDatabase
-from indicators.investment_signals import generate_investment_signals, analyze_current_position, get_latest_price_ratio
-from indicators.technical_indicators import calculate_indicators, calculate_price_ratio_anomaly
-from k_chart_fetcher import k_chart_fetcher, durations, get_stock_data_pair, date_alignment
-from kline_processor.processor import process_kline_by_type
-# 导入LSTM预测器
-from prediction import get_predictor
-# 导入模块化后的函数
-from stock_search.searcher import score_match, is_stock_code_format, fetch_stock_from_api
-# 导入回测引擎
-from backtest.backtest_strategy import BacktestEngine
+from indicators.investment_signals import generate_investment_signals, analyze_current_position
 # 导入新增的信号评估模块
 from indicators.signal_evaluator import (
     evaluate_signal_quality,
@@ -32,15 +23,32 @@ from indicators.signal_evaluator import (
     get_signal_performance_stats,
     get_signal_history
 )
+from indicators.technical_indicators import calculate_indicators, calculate_price_ratio_anomaly
+from k_chart_fetcher import k_chart_fetcher, durations, get_stock_data_pair, date_alignment
+from kline_processor.processor import process_kline_by_type
+# 导入LSTM预测器
+from prediction import get_predictor
+# 导入模块化后的函数
+from stock_search.searcher import score_match, is_stock_code_format, fetch_stock_from_api
+
+# 导入用户管理模块
+from user_management import UserModel, FavoriteModel, RecentPairModel
+from user_management import generate_captcha, verify_captcha
+from user_management import create_session, get_session, delete_session
+from user_management.dashboard_service import get_dashboard_data
+
+import io
+from PIL import Image, ImageDraw, ImageFont
+import numpy as np
 
 app = FastAPI()
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["captcha-id"]  # 允许前端获取自定义header
 )
 
 """
@@ -678,7 +686,7 @@ async def get_investment_signals(request: SignalRequestModel):
                 close_b,
                 dates
             )
-        
+
         # 确保所有数据都是Python原生类型，防止NumPy类型序列化问题
         def ensure_native_types(obj):
             if isinstance(obj, dict):
@@ -691,7 +699,7 @@ async def get_investment_signals(request: SignalRequestModel):
                 return obj.tolist()
             else:
                 return obj
-        
+
         # 应用类型转换
         signals = ensure_native_types(signals)
         current_position = ensure_native_types(current_position)
@@ -704,7 +712,6 @@ async def get_investment_signals(request: SignalRequestModel):
         print(f"获取投资信号时出错: {e}")
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
-
 
 
 @app.get("/signal_history/{code_a}/{code_b}")
@@ -729,15 +736,19 @@ async def get_signals_history(code_a: str, code_b: str, limit: int = 50, include
 
 
 @app.get("/signal_performance_stats/")
-async def get_signals_performance_stats():
+async def get_signals_performance_stats(code_a: str = None, code_b: str = None):
     """
     获取信号表现统计数据
+    
+    参数:
+        code_a: 可选，股票A代码，用于筛选特定股票对
+        code_b: 可选，股票B代码，用于筛选特定股票对
     
     返回:
         信号表现统计报告
     """
     try:
-        stats = get_signal_performance_stats()
+        stats = get_signal_performance_stats(code_a, code_b)
         return stats
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -766,37 +777,46 @@ async def get_signal_tracking(record_id: int):
 
 @app.post("/backtest_strategy/")
 async def backtest_strategy(params: dict):
-    """
-    运行价差信号回测
-
-    参数:
-    - params: 回测参数字典
-        - code_a: 资产A代码
-        - code_b: 资产B代码
-        - start_date: 开始日期
-        - end_date: 结束日期
-        - initial_capital: 初始资金
-        - position_size_type: 仓位计算方式 ('fixed'/'percent')
-        - position_size: 仓位大小
-        - entry_threshold: 入场阈值
-        - exit_threshold: 出场阈值
-        - stop_loss: 止损比例
-        - take_profit: 止盈比例
-        - max_positions: 最大持仓数量
-        - trading_fee: 交易费率
-
-    返回:
-    - 回测结果对象
-    """
     try:
-        # 创建回测引擎实例
         engine = BacktestEngine()
-
-        # 运行回测并返回结果
         result = engine.run_price_ratio_backtest(params)
         return result
     except Exception as e:
-        return {"error": f"回测执行过程中发生错误: {str(e)}"}
+        traceback_str = traceback.format_exc()
+        return {"error": f"回测失败: {str(e)}", "traceback": traceback_str}
+
+
+@app.post("/backtest_similar_signals/")
+async def backtest_similar_signals(params: dict):
+    """
+    运行基于当前价格比值与历史相似信号的回测策略
+    
+    该策略仅基于当前比值位置与历史上最相似的几个投资信号进行回测，
+    以验证当前投资机会的潜在表现。
+    
+    请求参数:
+    {
+        "code_a": "AAPL",               # 资产A代码
+        "code_b": "MSFT",               # 资产B代码
+        "initial_capital": 100000,      # 初始资金
+        "position_size": 30,            # 仓位大小(%)
+        "stop_loss": 5,                 # 止损比例(%)
+        "take_profit": 10,              # 止盈比例(%)
+        "trading_fee": 0.0003,          # 交易费率
+        "polynomial_degree": 3,         # 多项式拟合的次数
+        "threshold_multiplier": 1.5     # 信号生成的阈值乘数
+    }
+    
+    返回:
+    包含交易记录、绩效指标和相似信号分析的字典
+    """
+    try:
+        engine = BacktestEngine()
+        result = engine.run_similar_signals_backtest(params)
+        return result
+    except Exception as e:
+        traceback_str = traceback.format_exc()
+        return {"error": f"相似信号回测失败: {str(e)}", "traceback": traceback_str}
 
 
 class OptimalThresholdRequest(BaseModel):
@@ -861,6 +881,309 @@ async def calculate_optimal_threshold(request: OptimalThresholdRequest):
         print(f"计算最优阈值时发生错误: {str(e)}")
         traceback.print_exc()
         return {"error": f"计算最优阈值时发生错误: {str(e)}"}
+
+
+# 验证码图片生成辅助函数
+def generate_captcha_image(text: str, width: int = 120, height: int = 40) -> Image.Image:
+    """生成包含验证码的图片"""
+    # 创建白底图片
+    image = Image.new('RGB', (width, height), color=(255, 255, 255))
+    draw = ImageDraw.Draw(image)
+    
+    # 尝试加载字体，如果失败则使用默认字体
+    try:
+        font = ImageFont.truetype("arial.ttf", 26)
+    except IOError:
+        font = ImageFont.load_default()
+    
+    # 绘制验证码文本
+    # 修复：PIL新版本使用getbbox或getsize替代textsize
+    try:
+        # 使用getsize（较旧但更广泛支持）
+        text_width, text_height = draw.textsize(text, font=font)
+    except AttributeError:
+        try:
+            # 使用getbbox（新版本PIL）
+            bbox = font.getbbox(text)
+            text_width, text_height = bbox[2] - bbox[0], bbox[3] - bbox[1]
+        except AttributeError:
+            # 最后尝试使用getsize
+            text_width, text_height = font.getsize(text)
+    
+    x = (width - text_width) // 2
+    y = (height - text_height) // 2
+    
+    # 确保x和y不为负值
+    x = max(0, x)
+    y = max(0, y)
+    
+    # 绘制文本
+    draw.text((x, y), text, font=font, fill=(0, 0, 0))
+    
+    # 添加干扰线
+    for i in range(5):
+        start_point = (np.random.randint(0, width), np.random.randint(0, height))
+        end_point = (np.random.randint(0, width), np.random.randint(0, height))
+        draw.line([start_point, end_point], fill=(0, 0, 255), width=1)
+    
+    # 添加干扰点
+    for i in range(50):
+        x = np.random.randint(0, width)
+        y = np.random.randint(0, height)
+        draw.point((x, y), fill=(0, 0, 0))
+    
+    return image
+
+
+# 用户相关的请求模型
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+    captcha: str
+    captcha_id: str
+
+
+class RegisterRequest(BaseModel):
+    username: str
+    password: str
+    email: str = None
+    captcha: str
+    captcha_id: str
+
+
+class AddFavoriteRequest(BaseModel):
+    stock_code: str
+    stock_name: str
+    stock_type: str
+
+
+class AddRecentPairRequest(BaseModel):
+    code_a: str
+    name_a: str
+    code_b: str
+    name_b: str
+
+
+# 获取验证码图片
+@app.get("/api/captcha")
+async def get_captcha():
+    # 生成验证码和ID
+    captcha_id, captcha_text = generate_captcha(4)
+
+    # 生成验证码图片
+    image = generate_captcha_image(captcha_text)
+
+    # 将图片转换为二进制流
+    img_byte_arr = io.BytesIO()
+    image.save(img_byte_arr, format='PNG')
+    img_byte_arr.seek(0)
+
+    # 返回验证码图片和ID
+    return StreamingResponse(
+        img_byte_arr,
+        media_type="image/png",
+        headers={"captcha-id": captcha_id}
+    )
+
+
+# 用户登录
+@app.post("/api/login")
+async def login(request: LoginRequest, response: Response):
+    # 验证验证码
+    if not verify_captcha(request.captcha_id, request.captcha):
+        raise HTTPException(status_code=400, detail="验证码错误或已过期")
+
+    # 验证用户凭据
+    user = UserModel.verify_user(request.username, request.password)
+    if not user:
+        raise HTTPException(status_code=401, detail="用户名或密码错误")
+
+    # 创建会话
+    session_id = create_session(user)
+
+    # 设置会话Cookie
+    response.set_cookie(
+        key="session_id",
+        value=session_id,
+        max_age=24 * 3600,  # 24小时
+        httponly=True,
+        samesite="lax"
+    )
+
+    # 返回用户信息（不包含密码）
+    user.pop("password_hash", None)
+    return {"status": "success", "user": user}
+
+
+# 用户注册
+@app.post("/api/register")
+async def register(request: RegisterRequest):
+    # 验证验证码
+    if not verify_captcha(request.captcha_id, request.captcha):
+        raise HTTPException(status_code=400, detail="验证码错误或已过期")
+
+    # 创建用户
+    user_id = UserModel.create_user(request.username, request.password, request.email)
+    if not user_id:
+        raise HTTPException(status_code=400, detail="用户名或邮箱已存在")
+
+    return {"status": "success", "user_id": user_id}
+
+
+# 用户登出
+@app.post("/api/logout")
+async def logout(response: Response, session_id: str = Cookie(None)):
+    if session_id:
+        delete_session(session_id)
+
+    # 清除会话Cookie
+    response.delete_cookie(key="session_id")
+
+    return {"status": "success"}
+
+
+# 检查会话状态
+@app.get("/api/session")
+async def check_session(session_id: str = Cookie(None)):
+    if not session_id:
+        raise HTTPException(status_code=401, detail="未登录")
+
+    user = get_session(session_id)
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期")
+
+    # 不返回密码信息
+    user.pop("password_hash", None)
+    return {"status": "success", "user": user}
+
+
+# 添加收藏资产
+@app.post("/api/favorites")
+async def add_favorite(request: AddFavoriteRequest, session_id: str = Cookie(None)):
+    if not session_id:
+        raise HTTPException(status_code=401, detail="未登录")
+
+    user = get_session(session_id)
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期")
+
+    # 添加收藏
+    success = FavoriteModel.add_favorite(
+        user["id"],
+        request.stock_code,
+        request.stock_name,
+        request.stock_type
+    )
+
+    if not success:
+        raise HTTPException(status_code=400, detail="已收藏过该资产")
+
+    return {"status": "success"}
+
+
+# 删除收藏资产
+@app.delete("/api/favorites/{stock_code}")
+async def remove_favorite(stock_code: str, session_id: str = Cookie(None)):
+    if not session_id:
+        raise HTTPException(status_code=401, detail="未登录")
+
+    user = get_session(session_id)
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期")
+
+    # 删除收藏
+    success = FavoriteModel.remove_favorite(user["id"], stock_code)
+
+    if not success:
+        raise HTTPException(status_code=404, detail="未找到该收藏资产")
+
+    return {"status": "success"}
+
+
+# 获取收藏资产列表
+@app.get("/api/favorites")
+async def get_favorites(session_id: str = Cookie(None)):
+    if not session_id:
+        raise HTTPException(status_code=401, detail="未登录")
+
+    user = get_session(session_id)
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期")
+
+    # 获取收藏列表
+    favorites = FavoriteModel.get_user_favorites(user["id"])
+
+    return {"status": "success", "favorites": favorites}
+
+
+# 检查资产是否已收藏
+@app.get("/api/favorites/{stock_code}/check")
+async def check_favorite(stock_code: str, session_id: str = Cookie(None)):
+    if not session_id:
+        raise HTTPException(status_code=401, detail="未登录")
+
+    user = get_session(session_id)
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期")
+
+    # 检查是否已收藏
+    is_favorite = FavoriteModel.is_favorite(user["id"], stock_code)
+
+    return {"status": "success", "is_favorite": is_favorite}
+
+
+# 添加最近查看的资产对
+@app.post("/api/recent-pairs")
+async def add_recent_pair(request: AddRecentPairRequest, session_id: str = Cookie(None)):
+    if not session_id:
+        raise HTTPException(status_code=401, detail="未登录")
+
+    user = get_session(session_id)
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期")
+
+    # 添加或更新最近查看记录
+    RecentPairModel.add_recent_pair(
+        user["id"],
+        request.code_a,
+        request.name_a,
+        request.code_b,
+        request.name_b
+    )
+
+    return {"status": "success"}
+
+
+# 获取最近查看的资产对列表
+@app.get("/api/recent-pairs")
+async def get_recent_pairs(session_id: str = Cookie(None)):
+    if not session_id:
+        raise HTTPException(status_code=401, detail="未登录")
+
+    user = get_session(session_id)
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期")
+
+    # 获取最近查看列表
+    recent_pairs = RecentPairModel.get_user_recent_pairs(user["id"])
+
+    return {"status": "success", "recent_pairs": recent_pairs}
+
+
+# 获取仪表盘数据
+@app.get("/api/dashboard")
+async def get_dashboard(session_id: str = Cookie(None)):
+    if not session_id:
+        raise HTTPException(status_code=401, detail="未登录")
+
+    user = get_session(session_id)
+    if not user:
+        raise HTTPException(status_code=401, detail="会话已过期")
+
+    # 获取仪表盘数据
+    dashboard_data = get_dashboard_data(user["id"])
+
+    return {"status": "success", "data": dashboard_data}
 
 
 if __name__ == "__main__":

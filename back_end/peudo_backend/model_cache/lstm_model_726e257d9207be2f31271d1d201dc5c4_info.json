@@ -1,1 +1,0 @@
-{"timestamp": 1745139274.2469661, "codes": ["002594", "000001"], "params": {"seq_length": 30, "prediction_days": 20, "confidence_level": 0.9, "model_type": "lstm", "model_version": "v4"}}

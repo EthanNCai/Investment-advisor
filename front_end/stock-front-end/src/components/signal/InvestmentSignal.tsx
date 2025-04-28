@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Card, Spin, Tabs, message, Space, Typography, Alert, Row, Col, Select, Input } from 'antd';
+import { Card, Spin, Tabs, message, Space, Typography, Alert, Row, Col, Select, Input, Button, List, Empty, Tag } from 'antd';
 import { useLocalStorage } from '../../LocalStorageContext';
 import SignalList from './SignalList';
 import SignalDetail from './SignalDetail';
@@ -9,6 +9,7 @@ import BacktestSystem from './BacktestSystem';
 import SignalStatsCard from './SignalStatsCard';
 import { SearchOutlined } from '@ant-design/icons';
 import axios from 'axios';
+
 
 const { Title, Text } = Typography;
 const { TabPane } = Tabs;
@@ -68,6 +69,10 @@ const InvestmentSignal: React.FC = () => {
   // 过滤条件 - 始终使用数组初始化
   const [signalStrength, setSignalStrength] = useLocalStorage<string[]>('signalStrength', ['weak', 'medium', 'strong']);
   const [signalType, setSignalType] = useLocalStorage<string[]>('signalType', ['positive', 'negative']);
+  
+  // 添加用于记录用户查看历史的状态
+  const [stockAName, setStockAName] = useState<string>('');
+  const [stockBName, setStockBName] = useState<string>('');
   
   // 初始加载时获取常用股票列表
   useEffect(() => {
@@ -156,6 +161,47 @@ const InvestmentSignal: React.FC = () => {
           setSelectedSignal(null);
         }
       }
+      
+      // 如果用户已登录，记录查看的资产对
+      const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
+      if (isLoggedIn) {
+        try {
+          // 查找完整的股票信息对象
+          const stockInfoA = stockAOptions.find(stock => stock.code === selectedStockA);
+          const stockInfoB = stockBOptions.find(stock => stock.code === selectedStockB);
+          
+          // 如果找不到完整信息，尝试从搜索API获取
+          let nameA = stockInfoA?.name || '';
+          let nameB = stockInfoB?.name || '';
+          
+          // 如果没有找到名称，设置为备用值
+          if (!nameA) {
+            nameA = stockAName || selectedStockA;
+          }
+          
+          if (!nameB) {
+            nameB = stockBName || selectedStockB;
+          }
+          
+          // 发送记录到后端
+          await fetch('http://localhost:8000/api/recent-pairs', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              code_a: selectedStockA,
+              name_a: nameA,
+              code_b: selectedStockB,
+              name_b: nameB
+            }),
+            credentials: 'include', // 确保包含cookie进行身份验证
+          });
+          console.log('已记录查看历史:', selectedStockA, selectedStockB);
+        } catch (error) {
+          console.error('记录查看历史失败:', error);
+        }
+      }
     } catch (error) {
       console.error('获取投资信号失败:', error);
       message.error('获取投资信号失败');
@@ -202,10 +248,39 @@ const InvestmentSignal: React.FC = () => {
   
   // 处理股票选择
   const handleStockSelect = (value: string, type: 'A' | 'B') => {
-    if (type === 'A') {
-      setSelectedStockA(value);
+    // 查找选中的股票信息，获取名称
+    const stockOptions = type === 'A' ? stockAOptions : stockBOptions;
+    const stockInfo = stockOptions.find(stock => stock.code === value);
+    
+    if (stockInfo) {
+      if (type === 'A') {
+        setStockAName(stockInfo.name);
+        setSelectedStockA(value);
+      } else {
+        setStockBName(stockInfo.name);
+        setSelectedStockB(value);
+      }
     } else {
-      setSelectedStockB(value);
+      // 如果在当前选项中找不到，可以再尝试从另一组选项中查找
+      const allOptions = [...stockAOptions, ...stockBOptions];
+      const stockFromAll = allOptions.find(stock => stock.code === value);
+      
+      if (stockFromAll) {
+        if (type === 'A') {
+          setStockAName(stockFromAll.name);
+          setSelectedStockA(value);
+        } else {
+          setStockBName(stockFromAll.name);
+          setSelectedStockB(value);
+        }
+      } else {
+        // 如果还是找不到，直接设置代码，名称暂时留空
+        if (type === 'A') {
+          setSelectedStockA(value);
+        } else {
+          setSelectedStockB(value);
+        }
+      }
     }
   };
   
@@ -223,6 +298,16 @@ const InvestmentSignal: React.FC = () => {
   
   return (
     <div className="investment-signal-page">
+      {/* 添加ViewRecorder组件记录用户查看历史，修改属性名以匹配接口 */}
+      {selectedStockA && selectedStockB && stockAName && stockBName && (
+        <ViewRecorder 
+          codeA={selectedStockA}
+          nameA={stockAName}
+          codeB={selectedStockB}
+          nameB={stockBName}
+        />
+      )}
+      
       <Card title="投资信号分析" bordered={false}>
         <Space direction="vertical" style={{ width: '100%' }}>
           {/* 股票选择区域 */}
@@ -338,13 +423,17 @@ const InvestmentSignal: React.FC = () => {
             </TabPane>
             
             <TabPane tab="信号统计" key="3">
-              <SignalStatsCard />
+              <SignalStatsCard 
+                codeA={selectedStockA}
+                codeB={selectedStockB}
+              />
             </TabPane>
             
             <TabPane tab="回测系统" key="4">
               <BacktestSystem 
-                stockA={selectedStockA} 
-                stockB={selectedStockB} 
+                codeA={selectedStockA} 
+                codeB={selectedStockB} 
+                signals={signals}
               />
             </TabPane>
           </Tabs>

@@ -151,6 +151,38 @@ const RatioAnalysis: React.FC = () => {
       // 设置新的图表数据
       setChartData(updatedData);
       
+      // 如果用户已登录且不是仅调整阈值，记录查看的资产对
+      const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
+      if (isLoggedIn && !isThresholdAdjustment) {
+        try {
+          // 从股票列表中查找股票名称
+          const stockInfoA = stockList.find(item => item.code === stockA);
+          const stockInfoB = stockList.find(item => item.code === stockB);
+          
+          if (stockInfoA && stockInfoB) {
+            // 发送记录到后端
+            await fetch('http://localhost:8000/api/recent-pairs', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                code_a: stockA,
+                name_a: stockInfoA.name,
+                code_b: stockB,
+                name_b: stockInfoB.name
+              }),
+              credentials: 'include', // 确保包含cookie进行身份验证
+            });
+            console.log('已记录查看历史:', stockA, stockB);
+          } else {
+            console.warn('无法找到完整的股票信息:', stockA, stockB);
+          }
+        } catch (error) {
+          console.error('记录查看历史失败:', error);
+        }
+      }
+      
       // 只显示通知，不再自动切换选项卡
       if (updatedData.anomaly_info.warning_level === 'high') {
         notification.warning({
