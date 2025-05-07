@@ -13,7 +13,8 @@ import {
     FormGroup,
     FormControlLabel,
     Checkbox,
-    SelectChangeEvent
+    SelectChangeEvent,
+    Collapse
 } from '@mui/material';
 import { AssetSelectionContext, KlineType } from './AssetInterfaces';
 
@@ -31,7 +32,15 @@ const KlineSettings = () => {
         setDuration,
         selectedIndicators,
         setSelectedIndicators,
-        selectedAsset
+        selectedAsset,
+        selectedMALines = ['ma5', 'ma10', 'ma20'],
+        setSelectedMALines = (lines) => console.log('MA lines not supported', lines),
+        selectedMACDLines = ['dif', 'dea', 'macd'],
+        setSelectedMACDLines = (lines) => console.log('MACD lines not supported', lines),
+        selectedRSILines = ['rsi6', 'rsi12', 'rsi24'],
+        setSelectedRSILines = (lines) => console.log('RSI lines not supported', lines),
+        selectedKDJLines = ['k', 'd', 'j'],
+        setSelectedKDJLines = (lines) => console.log('KDJ lines not supported', lines)
     } = context;
     
     const handleKlineTypeChange = (_event: React.MouseEvent<HTMLElement>, newKlineType: KlineType | null) => {
@@ -52,6 +61,38 @@ const KlineSettings = () => {
         } else {
             setSelectedIndicators(selectedIndicators.filter(item => item !== indicator));
         }
+    };
+    
+    const handleMALineChange = (checkedValues: string[]) => {
+        if (checkedValues.length === 0) {
+            alert('请至少选择一条均线');
+            return;
+        }
+        setSelectedMALines(checkedValues);
+    };
+
+    const handleMACDLineChange = (checkedValues: string[]) => {
+        if (checkedValues.length === 0) {
+            alert('请至少选择一条MACD线');
+            return;
+        }
+        setSelectedMACDLines(checkedValues);
+    };
+
+    const handleRSILineChange = (checkedValues: string[]) => {
+        if (checkedValues.length === 0) {
+            alert('请至少选择一条RSI线');
+            return;
+        }
+        setSelectedRSILines(checkedValues);
+    };
+
+    const handleKDJLineChange = (checkedValues: string[]) => {
+        if (checkedValues.length === 0) {
+            alert('请至少选择一条KDJ线');
+            return;
+        }
+        setSelectedKDJLines(checkedValues);
     };
     
     if (!selectedAsset) {
@@ -158,6 +199,135 @@ const KlineSettings = () => {
                     />
                 </Box>
             </FormGroup>
+            
+            <Collapse in={selectedIndicators.includes('ma')}>
+                <Box sx={{ mt: 2 }}>
+                    <Typography variant="body2" gutterBottom>
+                        选择显示的均线:
+                    </Typography>
+                    <FormGroup row>
+                        {['MA5', 'MA10', 'MA20', 'MA60'].map((ma, index) => (
+                            <FormControlLabel
+                                key={index}
+                                control={
+                                    <Checkbox 
+                                        checked={selectedMALines.includes(ma.toLowerCase())}
+                                        onChange={(e) => {
+                                            const value = ma.toLowerCase();
+                                            if (e.target.checked) {
+                                                handleMALineChange([...selectedMALines, value]);
+                                            } else {
+                                                handleMALineChange(selectedMALines.filter(item => item !== value));
+                                            }
+                                        }}
+                                        size="small"
+                                    />
+                                }
+                                label={ma}
+                            />
+                        ))}
+                    </FormGroup>
+                </Box>
+            </Collapse>
+            
+            <Collapse in={selectedIndicators.includes('macd')}>
+                <Box sx={{ mt: 2 }}>
+                    <Typography variant="body2" gutterBottom>
+                        选择显示的MACD指标:
+                    </Typography>
+                    <FormGroup row>
+                        {[
+                            { label: 'DIF', value: 'dif' },
+                            { label: 'DEA', value: 'dea' },
+                            { label: 'MACD柱', value: 'macd' }
+                        ].map((item, index) => (
+                            <FormControlLabel
+                                key={index}
+                                control={
+                                    <Checkbox 
+                                        checked={selectedMACDLines.includes(item.value)}
+                                        onChange={(e) => {
+                                            if (e.target.checked) {
+                                                handleMACDLineChange([...selectedMACDLines, item.value]);
+                                            } else {
+                                                handleMACDLineChange(selectedMACDLines.filter(line => line !== item.value));
+                                            }
+                                        }}
+                                        size="small"
+                                    />
+                                }
+                                label={item.label}
+                            />
+                        ))}
+                    </FormGroup>
+                </Box>
+            </Collapse>
+            
+            <Collapse in={selectedIndicators.includes('rsi')}>
+                <Box sx={{ mt: 2 }}>
+                    <Typography variant="body2" gutterBottom>
+                        选择显示的RSI指标:
+                    </Typography>
+                    <FormGroup row>
+                        {[
+                            { label: 'RSI6', value: 'rsi6' },
+                            { label: 'RSI12', value: 'rsi12' },
+                            { label: 'RSI24', value: 'rsi24' }
+                        ].map((item, index) => (
+                            <FormControlLabel
+                                key={index}
+                                control={
+                                    <Checkbox 
+                                        checked={selectedRSILines.includes(item.value)}
+                                        onChange={(e) => {
+                                            if (e.target.checked) {
+                                                handleRSILineChange([...selectedRSILines, item.value]);
+                                            } else {
+                                                handleRSILineChange(selectedRSILines.filter(line => line !== item.value));
+                                            }
+                                        }}
+                                        size="small"
+                                    />
+                                }
+                                label={item.label}
+                            />
+                        ))}
+                    </FormGroup>
+                </Box>
+            </Collapse>
+            
+            <Collapse in={selectedIndicators.includes('kdj')}>
+                <Box sx={{ mt: 2 }}>
+                    <Typography variant="body2" gutterBottom>
+                        选择显示的KDJ指标:
+                    </Typography>
+                    <FormGroup row>
+                        {[
+                            { label: 'K线', value: 'k' },
+                            { label: 'D线', value: 'd' },
+                            { label: 'J线', value: 'j' }
+                        ].map((item, index) => (
+                            <FormControlLabel
+                                key={index}
+                                control={
+                                    <Checkbox 
+                                        checked={selectedKDJLines.includes(item.value)}
+                                        onChange={(e) => {
+                                            if (e.target.checked) {
+                                                handleKDJLineChange([...selectedKDJLines, item.value]);
+                                            } else {
+                                                handleKDJLineChange(selectedKDJLines.filter(line => line !== item.value));
+                                            }
+                                        }}
+                                        size="small"
+                                    />
+                                }
+                                label={item.label}
+                            />
+                        ))}
+                    </FormGroup>
+                </Box>
+            </Collapse>
         </Paper>
     );
 };

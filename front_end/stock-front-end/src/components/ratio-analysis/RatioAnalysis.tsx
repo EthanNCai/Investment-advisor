@@ -5,6 +5,7 @@ import AnomalyDetection from './AnomalyDetection';
 import { SliderSelector } from '../selectors/SliderSelector';
 import { useLocalStorage } from '../../LocalStorageContext';
 import PredictionAnalysis from '../prediction/PredictionAnalysis';
+import RatioIndicators from './RatioIndicators';
 
 // 使用Typography组件
 const { Text } = Typography;
@@ -244,17 +245,24 @@ const RatioAnalysis: React.FC = () => {
   const getAnomalyMarkPoints = () => {
     if (!chartData || !chartData.anomaly_info.anomalies.length) return [];
     
-    return chartData.anomaly_info.anomalies.map(anomaly => ({
-      name: '异常点',
-      value: chartData.ratio[anomaly.index],
-      xAxis: anomaly.index,
-      yAxis: chartData.ratio[anomaly.index],
-      itemStyle: {
-        color: anomaly.z_score > 3 ? '#ff4d4f' : anomaly.z_score > 2.5 ? '#faad14' : '#1890ff'
-      },
-      symbol: 'circle',
-      symbolSize: anomaly.z_score > 3 ? 10 : anomaly.z_score > 2.5 ? 8 : 6
-    }));
+    return chartData.anomaly_info.anomalies.map(anomaly => {
+      // 获取对应的差值以确定颜色
+      const deltaValue = chartData.delta[anomaly.index];
+      // 根据差值的正负来决定颜色
+      const color = deltaValue > 0 ? '#1890ff' : '#faad14'; // 正值为蓝色，负值为黄色
+      
+      return {
+        name: '异常点',
+        value: chartData.ratio[anomaly.index],
+        xAxis: anomaly.index,
+        yAxis: chartData.ratio[anomaly.index],
+        itemStyle: {
+          color: color
+        },
+        symbol: 'circle',
+        symbolSize: anomaly.z_score > 3 ? 10 : anomaly.z_score > 2.5 ? 8 : 6
+      };
+    });
   };
 
   // 比值图表配置
@@ -577,20 +585,21 @@ const RatioAnalysis: React.FC = () => {
             data: chartData.anomaly_info.anomalies.map(anomaly => {
               // 修改异常点判定条件，仅当Z分数>3或偏离度>15%时为极端异常
               const isExtreme = Math.abs(anomaly.z_score) > 3 || Math.abs(anomaly.deviation) > 0.15;
-              // 计算偏离度百分比，便于颜色判断
-              const deviationPct = Math.abs(anomaly.deviation * 100);
+              // 获取当前异常点的差值
+              const deltaValue = chartData.delta[anomaly.index];
+              // 根据差值的正负来决定颜色
+              const color = deltaValue > 0 ? '#1890ff' : '#faad14'; // 正值为蓝色，负值为黄色
+              
               return {
                 name: '', // 移除异常点名称，避免显示"异常点"文字
                 value: chartData.delta[anomaly.index],
                 xAxis: anomaly.index,
                 yAxis: chartData.delta[anomaly.index],
                 itemStyle: {
-                  // 修改颜色逻辑: 仅当偏离度>15%时为红色
-                  color: deviationPct > 15 ? '#ff0000' : 
-                         deviationPct > 10 ? '#ff5500' : 
-                         deviationPct > 5 ? '#ffaa00' : '#1890ff',
+                  // 使用基于差值的颜色
+                  color: color,
                   shadowBlur: isExtreme ? 10 : 5,
-                  shadowColor: 'rgba(255, 0, 0, 0.5)',
+                  shadowColor: 'rgba(0, 0, 0, 0.5)',
                   borderColor: '#fff',
                   borderWidth: isExtreme ? 2 : 1
                 },
@@ -859,6 +868,17 @@ const RatioAnalysis: React.FC = () => {
                     chartData={chartData}
                     stockA={selectedStockA}
                     stockB={selectedStockB}
+                  />
+                )
+              },
+              {
+                key: '4',
+                label: '比值指标',
+                children: chartData && (
+                  <RatioIndicators
+                    stockA={selectedStockA}
+                    stockB={selectedStockB}
+                    duration={selectedDuration}
                   />
                 )
               }

@@ -45,6 +45,9 @@ class EastMoneyKLineSpider:
         elif code.startswith('6'):
             return '1'  # 沪市
         elif code.startswith(('0', '3', '9', '8')) and len(code) == 6:
+            if code.startswith('000') or code.startswith('0000'):
+                if code != '000066':
+                    return '1'  # 上证指数
             return '0'  # 深市/北交所
 
         # 港股判断
@@ -190,7 +193,7 @@ class EastMoneyKLineSpider:
 if __name__ == "__main__":
     pass
     # # 测试A股
-    # sh_spider = EastMoneyKLineSpider("688981")
+    # sh_spider = EastMoneyKLineSpider("000902")
     # sh_data = sh_spider.get_klines()
     # print(sh_data['name'])
     # print(sh_data["klines"][-4:-1])
@@ -202,5 +205,3 @@ if __name__ == "__main__":
     # print(hk_data['klines'][-3:-1])
     # print(hk_spider.format_klines(hk_data['klines'])[-3:-1])
     # print(len(hk_data['klines']))
-
-

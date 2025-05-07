@@ -40,7 +40,12 @@ const StockKlineChart = () => {
         selectedIndicators, 
         selectedAsset,
         isLoading,
-        klineType
+        klineType,
+        // 添加细粒度指标选择的状态，如果不存在则使用默认值
+        selectedMALines = ['ma5', 'ma10', 'ma20', 'ma60'],
+        selectedMACDLines = ['dif', 'dea', 'macd'],
+        selectedRSILines = ['rsi6', 'rsi12', 'rsi24'],
+        selectedKDJLines = ['k', 'd', 'j']
     } = context;
     
     const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
@@ -204,38 +209,46 @@ const StockKlineChart = () => {
                     
                     {selectedIndicators.includes('ma') && (
                         <>
-                            <Line 
-                                type="monotone" 
-                                dataKey="ma5" 
-                                stroke="#8884d8" 
-                                yAxisId="left" 
-                                dot={false}
-                                name="MA5"
-                            />
-                            <Line 
-                                type="monotone" 
-                                dataKey="ma10" 
-                                stroke="#82ca9d" 
-                                yAxisId="left" 
-                                dot={false}
-                                name="MA10"
-                            />
-                            <Line 
-                                type="monotone" 
-                                dataKey="ma20" 
-                                stroke="#ffc658" 
-                                yAxisId="left" 
-                                dot={false}
-                                name="MA20"
-                            />
-                            <Line 
-                                type="monotone" 
-                                dataKey="ma60" 
-                                stroke="#9467bd" 
-                                yAxisId="left" 
-                                dot={false}
-                                name="MA60"
-                            />
+                            {selectedMALines.includes('ma5') && (
+                                <Line 
+                                    type="monotone" 
+                                    dataKey="ma5" 
+                                    stroke="#8884d8" 
+                                    yAxisId="left" 
+                                    dot={false}
+                                    name="MA5"
+                                />
+                            )}
+                            {selectedMALines.includes('ma10') && (
+                                <Line 
+                                    type="monotone" 
+                                    dataKey="ma10" 
+                                    stroke="#82ca9d" 
+                                    yAxisId="left" 
+                                    dot={false}
+                                    name="MA10"
+                                />
+                            )}
+                            {selectedMALines.includes('ma20') && (
+                                <Line 
+                                    type="monotone" 
+                                    dataKey="ma20" 
+                                    stroke="#ffc658" 
+                                    yAxisId="left" 
+                                    dot={false}
+                                    name="MA20"
+                                />
+                            )}
+                            {selectedMALines.includes('ma60') && (
+                                <Line 
+                                    type="monotone" 
+                                    dataKey="ma60" 
+                                    stroke="#9467bd" 
+                                    yAxisId="left" 
+                                    dot={false}
+                                    name="MA60"
+                                />
+                            )}
                         </>
                     )}
                 </LineChart>
@@ -326,18 +339,25 @@ const StockKlineChart = () => {
                 />
                 <Tooltip content={<CustomTooltip />} />
                 <Legend />
-                <Line type="monotone" dataKey="dif" stroke="#ff7300" dot={false} name="DIF线" />
-                <Line type="monotone" dataKey="dea" stroke="#82ca9d" dot={false} name="DEA线" />
                 
-                {/* 使用单个Bar组件和多个Cell组件来渲染不同颜色的MACD柱 */}
-                <Bar dataKey="macd" name="MACD柱">
-                    {validMacdData.map((entry, index) => (
-                        <Cell 
-                            key={`cell-${index}`} 
-                            fill={(entry.macd === null ? '#8884d8' : (entry.macd >= 0 ? '#e74c3c' : '#2ecc71'))} 
-                        />
-                    ))}
-                </Bar>
+                {selectedMACDLines.includes('dif') && (
+                    <Line type="monotone" dataKey="dif" stroke="#ff7300" dot={false} name="DIF线" />
+                )}
+                
+                {selectedMACDLines.includes('dea') && (
+                    <Line type="monotone" dataKey="dea" stroke="#82ca9d" dot={false} name="DEA线" />
+                )}
+                
+                {selectedMACDLines.includes('macd') && (
+                    <Bar dataKey="macd" name="MACD柱">
+                        {validMacdData.map((entry, index) => (
+                            <Cell 
+                                key={`cell-${index}`} 
+                                fill={(entry.macd === null ? '#8884d8' : (entry.macd >= 0 ? '#e74c3c' : '#2ecc71'))} 
+                            />
+                        ))}
+                    </Bar>
+                )}
             </ComposedChart>
         </ResponsiveContainer>
     );
@@ -363,9 +383,18 @@ const StockKlineChart = () => {
                 />
                 <Tooltip content={<CustomTooltip />} />
                 <Legend />
-                <Line type="monotone" dataKey="rsi6" stroke="#ff7300" dot={false} name="RSI6" />
-                <Line type="monotone" dataKey="rsi12" stroke="#82ca9d" dot={false} name="RSI12" />
-                <Line type="monotone" dataKey="rsi24" stroke="#8884d8" dot={false} name="RSI24" />
+                
+                {selectedRSILines.includes('rsi6') && (
+                    <Line type="monotone" dataKey="rsi6" stroke="#ff7300" dot={false} name="RSI6" />
+                )}
+                
+                {selectedRSILines.includes('rsi12') && (
+                    <Line type="monotone" dataKey="rsi12" stroke="#82ca9d" dot={false} name="RSI12" />
+                )}
+                
+                {selectedRSILines.includes('rsi24') && (
+                    <Line type="monotone" dataKey="rsi24" stroke="#8884d8" dot={false} name="RSI24" />
+                )}
             </LineChart>
         </ResponsiveContainer>
     );
@@ -390,9 +419,18 @@ const StockKlineChart = () => {
                 />
                 <Tooltip content={<CustomTooltip />} />
                 <Legend />
-                <Line type="monotone" dataKey="k" stroke="#ff7300" dot={false} name="K值" />
-                <Line type="monotone" dataKey="d" stroke="#82ca9d" dot={false} name="D值" />
-                <Line type="monotone" dataKey="j" stroke="#8884d8" dot={false} name="J值" />
+                
+                {selectedKDJLines.includes('k') && (
+                    <Line type="monotone" dataKey="k" stroke="#ff7300" dot={false} name="K值" />
+                )}
+                
+                {selectedKDJLines.includes('d') && (
+                    <Line type="monotone" dataKey="d" stroke="#82ca9d" dot={false} name="D值" />
+                )}
+                
+                {selectedKDJLines.includes('j') && (
+                    <Line type="monotone" dataKey="j" stroke="#8884d8" dot={false} name="J值" />
+                )}
             </LineChart>
         </ResponsiveContainer>
     );

@@ -520,7 +520,7 @@ const BacktestSystem: React.FC<BacktestSystemProps> = ({ codeA, codeB, signals }
                   label="最大持仓数量"
                   rules={[{ required: true, message: '请输入最大持仓数量' }]}
                 >
-                  <InputNumber min={1} max={20} style={{ width: '100%' }} />
+                  <InputNumber min={1} max={25} style={{ width: '100%' }} />
                 </Form.Item>
               </Col>
               

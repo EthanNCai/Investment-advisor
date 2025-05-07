@@ -234,8 +234,9 @@ class StockTrendsDatabase:
 
 if __name__ == '__main__':
     # 获取数据
-    trends_fetcher = StockTrendsData("000001")
+    trends_fetcher = StockTrendsData("000066")
     trends_data = trends_fetcher.get_trends()
+    print(trends_data['name'])
     formatted_data = trends_fetcher.format_klines(trends_data['trends'])
 
     # 存储数据
@@ -248,7 +249,7 @@ if __name__ == '__main__':
     )
 
     # 查询数据
-    result = db.query_trends(stock_code='000001')
+    result = db.query_trends(stock_code='000066')
     print(result)
 
     # 不再调用auto_update_trends函数

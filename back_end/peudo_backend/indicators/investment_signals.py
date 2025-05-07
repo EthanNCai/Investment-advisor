@@ -223,12 +223,12 @@ def analyze_current_position(
 
     # 4. 计算波动性水平
     recent_volatility = None
-    if len(ratio) >= 30:  # 只有当有足够的数据时才计算
-        # 计算最近30个交易日的波动率
-        recent_ratios = ratio[-30:]
+    if len(ratio) >= 90:  # 只有当有足够的数据时才计算
+        # 计算最近90个交易日的波动率
+        recent_ratios = ratio[-90:]
         recent_volatility = np.std(recent_ratios) / np.mean(recent_ratios)
-        # 计算较长期的波动率（如90天）作为比较基准
-        long_term_ratios = ratio[-min(90, len(ratio)):]
+        # 计算较长期的波动率（如180天）作为比较基准
+        long_term_ratios = ratio[-min(180, len(ratio)):]
         long_term_volatility = np.std(long_term_ratios) / np.mean(long_term_ratios)
 
         # 比较近期波动率与长期波动率
@@ -236,9 +236,9 @@ def analyze_current_position(
 
     volatility_level = None
     if recent_volatility is not None:
-        if recent_volatility < 0.035:
+        if recent_volatility < 0.025:
             volatility_level = "low"
-        elif recent_volatility < 0.08:
+        elif recent_volatility < 0.05:
             volatility_level = "medium"
         else:
             volatility_level = "high"
@@ -261,7 +261,7 @@ def analyze_current_position(
             # 使用sigmoid函数平滑相似度曲线，保持值在0-1之间
             ratio_similarity = 1 / (1 + np.exp(5 * log_diff))
 
-            # 2. 考虑相对于趋势线的位置（新增）
+            # 2. 考虑相对于趋势线的位置
             position_similarity = 1.0
             if current_z_score is not None and "z_score_mark" in signal:
                 # 如果两者相对于趋势线的位置类似（同侧且幅度接近），增加相似度
@@ -286,7 +286,7 @@ def analyze_current_position(
                 else:
                     direction_match = 0.8  # 方向不匹配时更大幅度减分
 
-            # 4. 动态时间权重（新增）
+            # 4. 动态时间权重
             # 根据市场环境变化调整时间权重重要性
             time_weight = 1.0
             if len(dates) > 0 and "date" in signal:
@@ -313,7 +313,7 @@ def analyze_current_position(
             current_trend_direction = None
             if len(fitting_line) >= 2:
                 # 使用拟合线的最近部分估计趋势
-                window_size = min(30, len(fitting_line))
+                window_size = min(90, len(fitting_line))
                 recent_trend = fitting_line[-window_size:]
                 if len(recent_trend) >= 2:
                     slope = (recent_trend[-1] - recent_trend[0]) / (len(recent_trend) - 1)
@@ -359,7 +359,7 @@ def analyze_current_position(
                     # 使用指数函数使得差异更显著
                     strength_similarity = np.exp(-0.4 * strength_diff)
 
-            # 添加：7. 价格形态相似性（比较历史价格比率模式）
+            # 7. 价格形态相似性（比较历史价格比率模式）
             pattern_similarity = 1.0
             if len(dates) > 0 and "date" in signal:
                 try:
@@ -378,7 +378,7 @@ def analyze_current_position(
                         current_pattern_start = max(0, current_pattern_end - 21)
                         current_pattern = ratio[current_pattern_start:current_pattern_end]
 
-                        # 标准化两个模式以便比较形状而非绝对值
+                        # 标准化两个模式以便比较形状
                         if signal_pattern and current_pattern:
                             norm_signal_pattern = [
                                 (x - min(signal_pattern)) / (max(signal_pattern) - min(signal_pattern) + 1e-10)
@@ -414,7 +414,7 @@ def analyze_current_position(
             time_weight_factor = 0.5 / total_weight  # 时间因素
             market_weight = 0.3 / total_weight  # 市场环境相似度
             strength_weight = 0.1 / total_weight  # 信号强度相似度
-            pattern_weight = 0.6 / total_weight  # 新增：价格形态相似度
+            pattern_weight = 0.6 / total_weight  # 价格形态相似度
 
             # 更新最终相似度计算
             weighted_similarity = (
@@ -576,11 +576,11 @@ def analyze_current_position(
         else:
             historical_signal_pattern = "混合模式"
 
-    # 10. 新增：计算趋势强度
+    # 10. 计算趋势强度
     trend_strength = None
     if len(fitting_line) >= 2:
         # 使用拟合线的斜率计算趋势强度
-        recent_window = min(30, len(fitting_line))
+        recent_window = min(90, len(fitting_line))
         recent_fit = fitting_line[-recent_window:]
 
         if recent_window >= 2:
@@ -613,7 +613,7 @@ def analyze_current_position(
                     "direction": "上升" if trend_slope > 0 else "下降"
                 }
 
-    # 11. 新增：计算支撑位和阻力位
+    # 11. 计算支撑位和阻力位
     support_resistance = None
     if len(ratio) >= 30:
         # 使用历史价格分布识别支撑位和阻力位
@@ -663,19 +663,19 @@ def analyze_current_position(
             "strong_resistance": round(float(q3), 3)
         }
 
-    # 12. 新增：计算均值回归概率
+    # 12. 计算均值回归概率
     mean_reversion_probability = None
     if current_z_score is not None:
         # 根据Z分数计算均值回归概率
         # Z分数越高，均值回归概率越大
         if abs(current_z_score) > 2.3:
-            prob = 0.85  # 极端偏离，高概率回归
+            prob = 0.9  # 极端偏离，高概率回归
         elif abs(current_z_score) > 1.8:
             prob = 0.7  # 显著偏离，较高概率回归
         elif abs(current_z_score) > 1.0:
             prob = 0.55  # 中等偏离，中等概率回归
         else:
-            prob = 0.3  # 轻微偏离，低概率回归
+            prob = 0.4  # 轻微偏离，低概率回归
 
         # 考虑趋势因素调整概率
         if trend_strength and trend_strength["level"] != "无明显趋势":
@@ -691,7 +691,7 @@ def analyze_current_position(
         # 确保概率在有效范围内
         mean_reversion_probability = max(0.1, min(0.95, prob))
 
-    # 13. 新增：分析在周期中的位置
+    # 13. 分析在周期中的位置
     cycle_position = None
     if percentile is not None and trend_strength:
         if percentile > 0.85:

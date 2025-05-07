@@ -155,14 +155,14 @@ const SignalQualityCard: React.FC<SignalQualityCardProps> = ({ signal }) => {
         <Col span={12}>
           <Tooltip title="基于信号Z得分和强度的评分">
             <div>信号强度: {evaluation.factors.strength.toFixed(1)}/30</div>
-            <Progress percent={evaluation.factors.strength / 30 * 100} size="small" />
+            <Progress percent={Number((evaluation.factors.strength / 30 * 100).toFixed(2))} size="small" />
           </Tooltip>
         </Col>
         
         <Col span={12}>
           <Tooltip title="基于市场条件和时机分析的评分">
             <div>市场条件: {evaluation.factors.market_condition.toFixed(1)}/25</div>
-            <Progress percent={evaluation.factors.market_condition / 25 * 100} size="small" />
+            <Progress percent={Number((evaluation.factors.market_condition / 25 * 100).toFixed(2))} size="small" />
           </Tooltip>
         </Col>
         

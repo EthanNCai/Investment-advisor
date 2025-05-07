@@ -90,6 +90,15 @@ export interface AssetSelectionContext {
     setSelectedIndicators: (indicators: string[]) => void;
     isLoading: boolean;
     setIsLoading: (loading: boolean) => void;
+    // 细粒度指标选择
+    selectedMALines: string[];
+    setSelectedMALines: (lines: string[]) => void;
+    selectedMACDLines: string[];
+    setSelectedMACDLines: (lines: string[]) => void;
+    selectedRSILines: string[];
+    setSelectedRSILines: (lines: string[]) => void;
+    selectedKDJLines: string[];
+    setSelectedKDJLines: (lines: string[]) => void;
 }
 
 // 创建上下文

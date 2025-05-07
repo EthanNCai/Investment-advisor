@@ -25,6 +25,12 @@ const AssetSelection = () => {
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
     
+    // 添加细粒度指标选择状态
+    const [selectedMALines, setSelectedMALines] = useState<string[]>(['ma5', 'ma10', 'ma20']);
+    const [selectedMACDLines, setSelectedMACDLines] = useState<string[]>(['dif', 'dea', 'macd']);
+    const [selectedRSILines, setSelectedRSILines] = useState<string[]>(['rsi6', 'rsi12', 'rsi24']);
+    const [selectedKDJLines, setSelectedKDJLines] = useState<string[]>(['k', 'd', 'j']);
+    
     // 获取所有资产或按类型筛选
     const fetchAllAssets = async () => {
         setIsLoading(true);
@@ -163,7 +169,15 @@ const AssetSelection = () => {
                 selectedIndicators,
                 setSelectedIndicators,
                 isLoading,
-                setIsLoading
+                setIsLoading,
+                selectedMALines,
+                setSelectedMALines,
+                selectedMACDLines,
+                setSelectedMACDLines,
+                selectedRSILines,
+                setSelectedRSILines,
+                selectedKDJLines,
+                setSelectedKDJLines
             }}
         >
             <Container maxWidth="lg" sx={{ mt: 2 }}>

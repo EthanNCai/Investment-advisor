@@ -135,6 +135,9 @@ class StockTrendsData:
         elif code.startswith('6'):
             return '1'  # 沪市
         elif code.startswith(('0', '3', '9', '8')) and len(code) == 6:
+            if code.startswith('000') or code.startswith('0000'):
+                if code != '000066':
+                    return '1'
             return '0'  # 深市/北交所
 
         # 港股判断
@@ -161,3 +164,5 @@ class StockTrendsData:
                 print(f"数据解析异常，跳过该条记录: {k}")
                 print(f"异常信息: {e}")
         return formatted
+
+

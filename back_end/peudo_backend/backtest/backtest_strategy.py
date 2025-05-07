@@ -347,7 +347,7 @@ class BacktestEngine:
                            current_signal <= pos_exit_threshold)):
                         close_reason = 'signal'
 
-                    # 7. 新增：风险加速平仓
+                    # 7. 风险加速平仓
                     # 如果行情剧烈逆转，加速平仓
                     elif (pos['asset'] == code_a and pos['direction'] == 'long' and
                           current_signal > pos.get('entry_signal', 0) * 1.5) or \
@@ -355,7 +355,7 @@ class BacktestEngine:
                              current_signal < pos.get('entry_signal', 0) * 1.5):
                         close_reason = 'trend_reversal'
 
-                    # 8. 新增：最大亏损保护
+                    # 8. 最大亏损保护
                     # 如果当前亏损超过历史平均亏损的2倍，提前平仓避免巨额亏损
                     elif losing_trades > 5 and total_loss > 0:
                         avg_loss_pct = total_loss / losing_trades / initial_capital * 100

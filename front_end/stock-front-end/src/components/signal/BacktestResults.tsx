@@ -437,12 +437,12 @@ const BacktestResults: React.FC<BacktestResultsProps> = ({ results }) => {
           data: [
             {
               value: [
-                annual_return,
-                sharpe_ratio,
-                win_rate,
-                Math.min(max_drawdown, 100),
-                sortino_ratio,
-                calmar_ratio
+                parseFloat(annual_return.toFixed(4)),
+                parseFloat(sharpe_ratio.toFixed(4)),
+                parseFloat(win_rate.toFixed(4)),
+                parseFloat(max_drawdown.toFixed(4)),
+                parseFloat(sortino_ratio.toFixed(4)),
+                parseFloat(calmar_ratio.toFixed(4))
               ],
               name: '策略表现',
               symbol: 'circle',

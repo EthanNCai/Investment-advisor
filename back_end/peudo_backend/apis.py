@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from back_end.peudo_backend.get_stock_data.auto_update_trends import start_auto_update_services
 # 导入回测引擎
 from backtest.backtest_strategy import BacktestEngine
 from get_stock_data.get_stock_trends_data import StockTrendsData
@@ -23,7 +24,7 @@ from indicators.signal_evaluator import (
     get_signal_performance_stats,
     get_signal_history
 )
-from indicators.technical_indicators import calculate_indicators, calculate_price_ratio_anomaly
+from indicators.technical_indicators import calculate_indicators, calculate_price_ratio_anomaly, calculate_ratio_indicators
 from k_chart_fetcher import k_chart_fetcher, durations, get_stock_data_pair, date_alignment
 from kline_processor.processor import process_kline_by_type
 # 导入LSTM预测器
@@ -1184,6 +1185,59 @@ async def get_dashboard(session_id: str = Cookie(None)):
     dashboard_data = get_dashboard_data(user["id"])
 
     return {"status": "success", "data": dashboard_data}
+
+
+class RatioIndicatorsRequest(BaseModel):
+    code_a: str
+    code_b: str
+    duration: str
+
+
+@app.post("/get_ratio_indicators/")
+async def get_ratio_indicators(request: RatioIndicatorsRequest):
+    """
+    获取两只股票价格比值的技术指标数据
+    
+    参数:
+        request: 包含股票代码和时间跨度的请求对象
+        
+    返回:
+        比值的移动平均线、MACD、RSI等技术指标数据
+    """
+    try:
+        # 获取两只股票的K线数据
+        close_a, close_b, dates_a, dates_b = get_stock_data_pair(request.code_a, request.code_b)
+        
+        # 日期对齐，确保使用相同交易日的数据
+        close_a, close_b, dates = date_alignment(close_a, close_b, dates_a, dates_b)
+        
+        # 根据时间跨度选择数据
+        duration_days = durations[request.duration]
+        if duration_days == -1 or duration_days >= len(close_a):
+            duration_days = len(close_a)
+            
+        close_a = close_a[-duration_days:]
+        close_b = close_b[-duration_days:]
+        dates = dates[-duration_days:]
+        
+        # 计算价格比值
+        ratio = [float(a) / float(b) for a, b in zip(close_a, close_b)]
+        
+        # 计算比值的技术指标
+        indicators = calculate_ratio_indicators(ratio)
+        
+        # 构建响应
+        response = {
+            "code_a": request.code_a,
+            "code_b": request.code_b,
+            "dates": dates,
+            "ratio": ratio,
+            "indicators": indicators
+        }
+        
+        return response
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":

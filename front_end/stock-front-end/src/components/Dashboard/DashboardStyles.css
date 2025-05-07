@@ -1,0 +1,88 @@
+/* Dashboard 样式文件 */
+
+/* 资产对表格样式 */
+.asset-pairs-table {
+  width: 100%;
+  border-radius: 4px;
+}
+
+/* 表格行样式 */
+.asset-pairs-table .ant-table-row:hover {
+  cursor: pointer;
+  background-color: #f0f7ff !important;
+}
+
+/* 表格头部样式 */
+.asset-pairs-table .ant-table-thead > tr > th {
+  background-color: #f5f5f5;
+  font-weight: 600;
+}
+
+/* 增加表格间距更均匀 */
+.asset-pairs-table .ant-table-cell {
+  padding: 12px 16px;
+}
+
+/* 表格文本不要被截断 */
+.asset-pairs-table .ant-table-cell {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 确保资产名称列有足够空间 */
+.asset-pairs-table .ant-table-column-title {
+  white-space: nowrap;
+}
+
+/* 操作按钮列居中 */
+.asset-pairs-table .ant-table-cell:last-child {
+  text-align: center;
+}
+
+/* 表格容器适应卡片尺寸 */
+.dashboard-card {
+  margin-bottom: 16px;
+}
+
+.dashboard-card .ant-card-body {
+  padding: 16px;
+}
+
+/* 确保分页器有合适的间距 */
+.asset-pairs-table + div {
+  margin-top: 16px;
+}
+
+/* 优化加载更多按钮的间距 */
+.load-more-button {
+  margin-top: 16px;
+}
+
+/* 优化表格在小屏幕上的显示 */
+@media (max-width: 768px) {
+  .asset-pairs-table .ant-table-cell {
+    padding: 8px;
+  }
+  
+  /* 在小屏幕上隐藏一些不太重要的列 */
+  .asset-pairs-table .ant-table-cell:nth-child(3) {
+    display: none;
+  }
+}
+
+/* 卡片标题行样式优化 */
+.dashboard-card .ant-card-head {
+  min-height: 48px;
+  padding: 0 16px;
+}
+
+.dashboard-card .ant-card-head-title {
+  padding: 12px 0;
+}
+
+/* 为资产对按钮添加悬停效果 */
+.asset-pairs-table .ant-btn-link:hover {
+  background-color: rgba(24, 144, 255, 0.1);
+  border-radius: 4px;
+} 

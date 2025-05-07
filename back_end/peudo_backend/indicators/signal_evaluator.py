@@ -323,7 +323,9 @@ def calculate_expected_return(
             return 0.015  # 1.5%
     
     # 计算历史信号的平均收益率
-    total_return = sum(r["actual_return"] for r in similar_signals if "actual_return" in r)
+    # total_return = sum(r["actual_return"] for r in similar_signals if "actual_return" in r)
+    total_return = sum(float(r["actual_return"]) for r in similar_signals
+                       if "actual_return" in r and r["actual_return"] is not None)
     avg_return = total_return / len(similar_signals)
     
     # 应用信号特定调整
@@ -368,7 +370,7 @@ def calculate_risk_ratio(
             return 0.01  # 1%
     
     # 计算历史信号的最大回撤平均值作为风险指标
-    total_risk = sum(r.get("max_drawdown", 0) for r in similar_signals)
+    total_risk = sum(r.get("max_drawdown", 0) for r in similar_signals if r.get("max_drawdown", 0) is not None)
     avg_risk = total_risk / len(similar_signals)
     
     # 应用信号特定调整

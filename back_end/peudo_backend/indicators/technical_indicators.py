@@ -312,7 +312,7 @@ def calculate_price_ratio_anomaly(ratio_data: List[float], delta_data: List[floa
     mean_ratio = sum(ratio_data) / len(ratio_data)
     std = std_value  # 使用传入的原始标准差
 
-    # 计算绝对阈值 - 用户设置的阈值倍数乘以标准差
+    # 计算绝对阈值
     absolute_threshold = threshold_multiplier * std
 
     # 我们将ratio和delta作为特征，这样模型可以同时考虑原始价格比率和与拟合线的偏差
@@ -441,4 +441,39 @@ def calculate_price_ratio_anomaly(ratio_data: List[float], delta_data: List[floa
         "warning_level": warning_level,
         "upper_bound": upper_bound,
         "lower_bound": lower_bound
+    }
+
+
+def calculate_ratio_indicators(ratio_data: List[float]) -> Dict[str, Any]:
+    """
+    计算价格比值的技术指标，包括移动平均线、MACD和RSI
+    
+    参数:
+        ratio_data: 价格比值数据列表
+    
+    返回:
+        包含各项技术指标的字典
+    """
+    # 转换成numpy数组便于计算
+    ratio_array = np.array(ratio_data)
+    
+    # 计算移动平均线
+    ma5 = calculate_ma(ratio_array, 5)
+    ma10 = calculate_ma(ratio_array, 10)
+    ma20 = calculate_ma(ratio_array, 20)
+    ma60 = calculate_ma(ratio_array, 60)
+    
+    # 计算MACD
+    macd_dict = calculate_macd(ratio_array)
+    
+    # 计算RSI
+    rsi_dict = calculate_rsi(ratio_array)
+    
+    return {
+        "ma5": ma5,
+        "ma10": ma10,
+        "ma20": ma20,
+        "ma60": ma60,
+        "macd": macd_dict,
+        "rsi": rsi_dict
     }
