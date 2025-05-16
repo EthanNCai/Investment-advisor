@@ -44,7 +44,7 @@ const InvestmentSignal: React.FC = () => {
   
   // 添加拟合阶数和阈值系数状态
   const [degree, setDegree] = useLocalStorage<number>('signal-analysis-degree', 3);
-  const [thresholdArg, setThresholdArg] = useLocalStorage<number>('signal-analysis-threshold', 2.0);
+  const [thresholdArg, setThresholdArg] = useLocalStorage<number>('signal-analysis-threshold', 1.5);
   
   // 添加追踪信号开关
   const [trackSignals, setTrackSignals] = useLocalStorage<boolean>('track-signals', true);

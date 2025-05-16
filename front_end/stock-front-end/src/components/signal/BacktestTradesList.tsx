@@ -17,7 +17,9 @@ interface Trade {
     pnl_percent: number;
     status: 'open' | 'closed';
     exit_reason?: string;
-    signal_value?: number;
+    entry_signal_type?: string;
+    entry_signal_strength?: number;
+    trade_direction?: string;
 }
 
 interface BacktestTradesListProps {
@@ -61,7 +63,7 @@ const BacktestTradesList: React.FC<BacktestTradesListProps> = ({trades}) => {
 
     const handleExportCSV = () => {
         // 构建CSV内容
-        const headers = ['ID', '入场日期', '出场日期', '持仓天数', '仓位类型', '入场价格', '出场价格', '仓位大小', '盈亏', '盈亏百分比', '状态', '出场原因', '信号值'];
+        const headers = ['ID', '入场日期', '出场日期', '持仓天数', '仓位类型', '入场价格', '出场价格', '仓位大小', '盈亏', '盈亏百分比', '状态', '出场原因'];
         const csvContent = [
             headers.join(','),
             ...trades.map(trade => [
@@ -76,8 +78,7 @@ const BacktestTradesList: React.FC<BacktestTradesListProps> = ({trades}) => {
                 trade.pnl.toFixed(2),
                 (trade.pnl_percent * 100).toFixed(2) + '%',
                 trade.status,
-                trade.exit_reason || '-',
-                trade.signal_value?.toFixed(2) || '-'
+                trade.exit_reason || '-'
             ].join(','))
         ].join('\n');
 
@@ -118,6 +119,10 @@ const BacktestTradesList: React.FC<BacktestTradesListProps> = ({trades}) => {
                 return 'cyan';
             case 'end_of_backtest':
                 return 'default';
+            case 'mean_reversion':
+                return 'geekblue';
+            case 'reverse_anomaly':
+                return 'volcano';
             default:
                 return 'default';
         }
@@ -140,6 +145,10 @@ const BacktestTradesList: React.FC<BacktestTradesListProps> = ({trades}) => {
                 return '时间止损';
             case 'end_of_backtest':
                 return '回测结束';
+            case 'mean_reversion':
+                return '回归均值';
+            case 'reverse_anomaly':
+                return '反向异常点';
             default:
                 return reason;
         }
@@ -269,21 +278,14 @@ const BacktestTradesList: React.FC<BacktestTradesListProps> = ({trades}) => {
                 {text: '止损', value: 'stop_loss'},
                 {text: '止盈', value: 'take_profit'},
                 {text: '追踪止损', value: 'trailing_stop'},
-                {text: '保本止损', value: 'breakeven_stop'},
                 {text: '时间止损', value: 'time_stop'},
+                {text: '回归均值', value: 'mean_reversion'},
+                {text: '反向异常点', value: 'reverse_anomaly'},
                 {text: '回测结束', value: 'end_of_backtest'},
             ],
             filteredValue: filteredInfo.exit_reason || null,
             onFilter: (value: Key | boolean, record: Trade) =>
                 record.exit_reason === String(value),
-        },
-        {
-            title: '信号值',
-            dataIndex: 'signal_value',
-            key: 'signal_value',
-            render: (signal: number | undefined) => signal !== undefined ? signal.toFixed(2) : '-',
-            sorter: (a: Trade, b: Trade) => (a.signal_value || 0) - (b.signal_value || 0),
-            sortOrder: sortedInfo.columnKey === 'signal_value' && sortedInfo.order,
         },
         {
             title: '状态',

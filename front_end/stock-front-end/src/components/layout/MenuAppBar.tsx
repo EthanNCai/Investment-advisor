@@ -82,6 +82,12 @@ export default function MenuAppBar() {
             requireAuth: true
         },
         { 
+            text: '联合分析', 
+            icon: <BarChartIcon />, 
+            path: '/multi-asset-analysis',
+            requireAuth: true
+        },
+        { 
             text: '投资信号', 
             icon: <SignalCellularAltIcon />, 
             path: '/investment-signals',

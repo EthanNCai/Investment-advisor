@@ -39,7 +39,7 @@ class StockTrendsData:
             'ndays': '1',
             'ut': 'fa5fd1943c7b386f172d6893dbfba10b'
         }
-        if self.market_type in ['113', '118']:
+        if self.market_type in ['113', '118', '101', '122', '100']:
             params = {
                 'fields1': 'f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13,f14,f17',
                 'fields2': 'f51,f53,f54,f55,f56,f57,f58',
@@ -107,13 +107,14 @@ class StockTrendsData:
             return {"error": f"发生未知错误: {str(e)}"}
 
     def get_market_name(self):
-        if self.market_type in ['113', '118']:
+        if self.market_type in ['113', '118', '101', '122']:
             return '黄金'
+        elif self.stock_code.upper() in ['SPX', 'DJIA', 'NDX']:
+            return '美股'
         return MARKET_TYPE_MAPPING.get(self.market_type, 'A股')
 
     def _determine_market(self) -> str:
         code = self.stock_code.upper()
-
         # 黄金期货判断 (113)
         if (code.startswith('AU') and 5 <= len(code) <= 6 and any(c.isdigit() for c in code)) or \
                 (code in ['AUM', 'AUS']):
@@ -126,7 +127,14 @@ class StockTrendsData:
                          'AG9999', 'AG999'] or \
                 (code.startswith('AU') and ('TD' in code or 'TN' in code)):
             return '118'  # 上海黄金现货
-
+        # 现货黄金
+        elif code[-2:] == 'AU' or code[-2:] == 'AG':
+            return '122'
+        # 期货黄金
+        elif code[-3:] == '00Y':
+            return '101'
+        elif code.startswith('HS') and 3 <= len(code) <= 9 or code in ['DJIA', 'SPX', 'NDX']:
+            return '100'
         # 美股判断
         elif code.replace(".", "").isalpha() and 1 <= len(code) <= 5:
             return '105'  # 美股

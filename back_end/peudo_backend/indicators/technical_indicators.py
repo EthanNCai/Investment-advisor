@@ -384,8 +384,8 @@ def calculate_price_ratio_anomaly(ratio_data: List[float], delta_data: List[floa
     # 对潜在异常点按综合分数排序
     potential_anomalies.sort(key=lambda x: x["combined_score"], reverse=True)
 
-    # 取分数最高的点作为确认的异常点（最多取原始数据的20%，至少10个点）
-    max_anomalies = max(int(len(ratio_data) * 0.2), 10)
+    # 取分数最高的点作为确认的异常点（最多取原始数据的25%，至少15个点）
+    max_anomalies = max(int(len(ratio_data) * 0.25), 15)
     for anomaly in potential_anomalies[:max_anomalies]:
         # 提高异常判定标准：综合分数必须大于2.4，或者超过绝对阈值，或被机器学习模型标记为异常
         if anomaly["combined_score"] > 2.5 or anomaly["exceeds_threshold"] or (
@@ -456,19 +456,19 @@ def calculate_ratio_indicators(ratio_data: List[float]) -> Dict[str, Any]:
     """
     # 转换成numpy数组便于计算
     ratio_array = np.array(ratio_data)
-    
+
     # 计算移动平均线
     ma5 = calculate_ma(ratio_array, 5)
     ma10 = calculate_ma(ratio_array, 10)
     ma20 = calculate_ma(ratio_array, 20)
     ma60 = calculate_ma(ratio_array, 60)
-    
+
     # 计算MACD
     macd_dict = calculate_macd(ratio_array)
-    
+
     # 计算RSI
     rsi_dict = calculate_rsi(ratio_array)
-    
+
     return {
         "ma5": ma5,
         "ma10": ma10,
@@ -477,3 +477,254 @@ def calculate_ratio_indicators(ratio_data: List[float]) -> Dict[str, Any]:
         "macd": macd_dict,
         "rsi": rsi_dict
     }
+
+
+def detect_moving_average_crosses(ma_short: List[float], ma_long: List[float], dates: List[str]) -> Dict[
+    str, List[Dict[str, Any]]]:
+    """
+    检测移动平均线的金叉和死叉
+    
+    参数:
+        ma_short: 短期移动平均线数据
+        ma_long: 长期移动平均线数据
+        dates: 日期列表
+        
+    返回:
+        包含金叉和死叉信息的字典
+    """
+    golden_crosses = []  # 金叉 - 短期线从下方穿过长期线
+    death_crosses = []  # 死叉 - 短期线从上方穿过长期线
+
+    # 确保数据长度一致
+    length = min(len(ma_short), len(ma_long), len(dates))
+
+    # 跳过None值
+    for i in range(1, length):
+        # 确保当前和前一个点都有有效值
+        if (ma_short[i] is not None and ma_long[i] is not None and
+                ma_short[i - 1] is not None and ma_long[i - 1] is not None):
+
+            # 检测金叉: 之前短期均线在长期均线下方，当前短期均线在长期均线上方
+            if ma_short[i - 1] < ma_long[i - 1] and ma_short[i] >= ma_long[i]:
+                golden_crosses.append({
+                    "date": dates[i],
+                    "index": i,
+                    "value": ma_short[i],
+                    "type": "golden"
+                })
+
+            # 检测死叉: 之前短期均线在长期均线上方，当前短期均线在长期均线下方
+            elif ma_short[i - 1] > ma_long[i - 1] and ma_short[i] <= ma_long[i]:
+                death_crosses.append({
+                    "date": dates[i],
+                    "index": i,
+                    "value": ma_short[i],
+                    "type": "death"
+                })
+
+    return {
+        "golden_crosses": golden_crosses,
+        "death_crosses": death_crosses
+    }
+
+
+def detect_macd_crosses(dif: List[float], dea: List[float], macd: List[float], dates: List[str]) -> Dict[
+    str, List[Dict[str, Any]]]:
+    """
+    检测MACD的金叉和死叉
+    
+    参数:
+        dif: DIF线数据 (快线)
+        dea: DEA线数据 (慢线)
+        macd: MACD柱状图数据
+        dates: 日期列表
+        
+    返回:
+        包含金叉、死叉和零轴穿越信息的字典
+    """
+    golden_crosses = []  # 金叉 - DIF从下方穿过DEA
+    death_crosses = []  # 死叉 - DIF从上方穿过DEA
+    zero_crossovers = []  # 零轴穿越 - DIF穿过零轴
+
+    # 确保数据长度一致
+    length = min(len(dif), len(dea), len(macd), len(dates))
+
+    # 跳过None值
+    for i in range(1, length):
+        # 确保当前和前一个点都有有效值
+        if (dif[i] is not None and dea[i] is not None and
+                dif[i - 1] is not None and dea[i - 1] is not None):
+
+            # 检测金叉: 之前DIF在DEA下方，当前DIF在DEA上方
+            if dif[i - 1] < dea[i - 1] and dif[i] >= dea[i]:
+                golden_crosses.append({
+                    "date": dates[i],
+                    "index": i,
+                    "value": dif[i],
+                    "type": "golden"
+                })
+
+            # 检测死叉: 之前DIF在DEA上方，当前DIF在DEA下方
+            elif dif[i - 1] > dea[i - 1] and dif[i] <= dea[i]:
+                death_crosses.append({
+                    "date": dates[i],
+                    "index": i,
+                    "value": dif[i],
+                    "type": "death"
+                })
+
+        # 检测DIF零轴穿越
+        if dif[i] is not None and dif[i - 1] is not None:
+            # 从下方穿过零轴 (看涨)
+            if dif[i - 1] < 0 <= dif[i]:
+                zero_crossovers.append({
+                    "date": dates[i],
+                    "index": i,
+                    "value": dif[i],
+                    "type": "bullish"
+                })
+            # 从上方穿过零轴 (看跌)
+            elif dif[i - 1] > 0 >= dif[i]:
+                zero_crossovers.append({
+                    "date": dates[i],
+                    "index": i,
+                    "value": dif[i],
+                    "type": "bearish"
+                })
+
+    return {
+        "golden_crosses": golden_crosses,
+        "death_crosses": death_crosses,
+        "zero_crossovers": zero_crossovers
+    }
+
+
+def detect_rsi_signals(rsi_values: List[float], dates: List[str],
+                       overbought: float = 70, oversold: float = 30,
+                       middle: float = 50) -> Dict[str, List[Dict[str, Any]]]:
+    """
+    检测RSI的超买、超卖信号和中轴交叉
+    
+    参数:
+        rsi_values: RSI指标数据
+        dates: 日期列表
+        overbought: 超买阈值，默认70
+        oversold: 超卖阈值，默认30
+        middle: 中轴值，默认50
+        
+    返回:
+        包含超买、超卖和中轴交叉信息的字典
+    """
+    overbought_signals = []  # 超买信号
+    oversold_signals = []  # 超卖信号
+    middle_crossovers = []  # 中轴交叉信号
+
+    # 检测超买和超卖条件
+    for i in range(1, min(len(rsi_values), len(dates))):
+        if rsi_values[i] is None or rsi_values[i - 1] is None:
+            continue
+
+        # 检测超买信号: 从下方穿过超买线
+        if rsi_values[i - 1] < overbought <= rsi_values[i]:
+            overbought_signals.append({
+                "date": dates[i],
+                "index": i,
+                "value": rsi_values[i],
+                "type": "overbought"
+            })
+
+        # 检测超卖信号: 从上方穿过超卖线
+        elif rsi_values[i - 1] > oversold >= rsi_values[i]:
+            oversold_signals.append({
+                "date": dates[i],
+                "index": i,
+                "value": rsi_values[i],
+                "type": "oversold"
+            })
+
+        # 检测中轴线交叉 
+
+        # 从下方穿过中轴线 (看涨)
+        if rsi_values[i - 1] < middle <= rsi_values[i]:
+            middle_crossovers.append({
+                "date": dates[i],
+                "index": i,
+                "value": rsi_values[i],
+                "type": "bullish"
+            })
+        # 从上方穿过中轴线 (看跌)
+        elif rsi_values[i - 1] > middle >= rsi_values[i]:
+            middle_crossovers.append({
+                "date": dates[i],
+                "index": i,
+                "value": rsi_values[i],
+                "type": "bearish"
+            })
+
+    return {
+        "overbought": overbought_signals,
+        "oversold": oversold_signals,
+        "middle_crossovers": middle_crossovers
+    }
+
+
+def detect_ratio_indicators_signals(ratio_indicators: Dict[str, Any], dates: List[str]) -> Dict[str, Any]:
+    """
+    检测价格比值指标的所有特殊点（金叉、死叉等）
+    
+    参数:
+        ratio_indicators: 价格比值指标数据，包含移动平均线、MACD和RSI
+        dates: 日期列表
+        
+    返回:
+        包含所有特殊点信息的字典
+    """
+    result = {}
+
+    # 检测移动平均线交叉点
+    ma_signals = {}
+
+    # MA5与MA10的交叉
+    if "ma5" in ratio_indicators and "ma10" in ratio_indicators:
+        ma_signals["ma5_ma10"] = detect_moving_average_crosses(
+            ratio_indicators["ma5"],
+            ratio_indicators["ma10"],
+            dates
+        )
+
+    # MA10与MA20的交叉
+    if "ma10" in ratio_indicators and "ma20" in ratio_indicators:
+        ma_signals["ma10_ma20"] = detect_moving_average_crosses(
+            ratio_indicators["ma10"],
+            ratio_indicators["ma20"],
+            dates
+        )
+
+    # MA20与MA60的交叉
+    if "ma20" in ratio_indicators and "ma60" in ratio_indicators:
+        ma_signals["ma20_ma60"] = detect_moving_average_crosses(
+            ratio_indicators["ma20"],
+            ratio_indicators["ma60"],
+            dates
+        )
+
+    result["ma_signals"] = ma_signals
+
+    # 检测MACD信号
+    if "macd" in ratio_indicators:
+        macd_data = ratio_indicators["macd"]
+        result["macd_signals"] = detect_macd_crosses(
+            macd_data["dif"],
+            macd_data["dea"],
+            macd_data["macd"],
+            dates
+        )
+
+    # 检测RSI信号
+    if "rsi" in ratio_indicators:
+        rsi_signals = {}
+        for period, values in ratio_indicators["rsi"].items():
+            rsi_signals[period] = detect_rsi_signals(values, dates)
+        result["rsi_signals"] = rsi_signals
+
+    return result

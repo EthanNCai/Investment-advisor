@@ -5,6 +5,7 @@ import {Routes, Route, Navigate} from "react-router-dom";
 import AssetSelection from "./components/AssetSelection/AssetSelection.tsx";
 import RatioAnalysis from "./components/ratio-analysis/RatioAnalysis.tsx";
 import InvestmentSignal from "./components/signal/InvestmentSignal.tsx";
+import MultiAssetAnalysis from "./components/multi-asset-analysis/MultiAssetAnalysis.tsx";
 import Login from "./components/auth/Login.tsx";
 import Register from "./components/auth/Register.tsx";
 import ForgotPassword from "./components/auth/ForgotPassword.tsx";
@@ -79,6 +80,12 @@ function App() {
                         <Route path="/investment-signals" element={
                             <ProtectedRoute isAuthenticated={isLoggedIn}>
                                 <InvestmentSignal />
+                            </ProtectedRoute>
+                        }/>
+                        
+                        <Route path="/multi-asset-analysis" element={
+                            <ProtectedRoute isAuthenticated={isLoggedIn}>
+                                <MultiAssetAnalysis />
                             </ProtectedRoute>
                         }/>
                     </Routes>

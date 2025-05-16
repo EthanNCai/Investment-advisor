@@ -19,13 +19,13 @@ interface BacktestSystemProps {
 
 // 最优阈值接口
 interface OptimalThreshold {
-  entry_threshold: number;
-  exit_threshold: number;
-  lookback_period: number;
+  anomaly_threshold: number;
+  polynomial_degree: number;
+  mean_reversion_threshold: number;
   estimated_profit: number;
   win_rate: number;
   trade_count: number;
-  strategy_type: string;
+  lookback_period?: number;
 }
 
 // 回测参数接口
@@ -37,22 +37,19 @@ interface BacktestParams {
   initial_capital: number;
   position_size_type: string; // 'fixed', 'percent', 'kelly'
   position_size: number;
-  entry_threshold: number;
-  exit_threshold: number;
   stop_loss: number;
   take_profit: number;
   max_positions: number;
   trading_fee: number;
   trailing_stop: number;
   time_stop: number;
-  breakeven_stop: boolean;
-  strategy_type: string;
   hedge_mode: string;
-  secondary_threshold: number;
-  volatility_window: number;
-  trend_window: number;
-  adaptive_threshold: boolean; // 是否启用自适应阈值
-  adaptive_period: number; // 自适应周期
+  // 新的异常点检测参数
+  polynomial_degree: number; // 多项式拟合次数
+  anomaly_threshold: number; // 异常检测阈值
+  mean_reversion_exit: boolean; // 回归均值出场
+  mean_reversion_threshold: number; // 回归均值阈值
+  reverse_anomaly_exit: boolean; // 反向异常点出场
 }
 
 // 回测结果接口
@@ -65,22 +62,10 @@ interface BacktestResult {
     positions_value: number;
     signal: number;
     ratio: number;
+    anomaly_signal: number;
+    delta?: number;
   }[];
-  trades: {
-    id: number;
-    entry_date: string;
-    exit_date: string | null;
-    holding_days: number;
-    entry_price: number;
-    exit_price: number | null;
-    position_type: string;
-    position_size: number;
-    pnl: number;
-    pnl_percent: number;
-    status: 'open' | 'closed';
-    exit_reason: string;
-    signal_value: number;
-  }[];
+  trades: any[];
   initial_capital: number;
   final_equity: number;
   total_return: number;
@@ -100,9 +85,8 @@ interface BacktestResult {
   profit_factor: number;
   avg_holding_period: number;
   strategy_parameters: {
-    strategy_type: string;
-    entry_threshold: number;
-    exit_threshold: number;
+    anomaly_threshold: number;
+    polynomial_degree: number;
     stop_loss: number;
     take_profit: number;
     trailing_stop: number;
@@ -110,6 +94,9 @@ interface BacktestResult {
     hedge_mode: string;
     position_size_type: string;
     position_size: number;
+    mean_reversion_exit?: boolean;
+    mean_reversion_threshold?: number;
+    reverse_anomaly_exit?: boolean;
   };
   error?: string;
 }
@@ -169,9 +156,6 @@ const BacktestSystem: React.FC<BacktestSystemProps> = ({ codeA, codeB, signals }
   const [similarSignalsResults, setSimilarSignalsResults] = useState<SimilarSignalsBacktestResult | null>(null);
   const [activeTab, setActiveTab] = useState<string>("1");
   const [showAdvancedOptions, setShowAdvancedOptions] = useState<boolean>(false);
-  const [strategyType, setStrategyType] = useState<string>("zscore");
-  const [optimalThresholdLoading, setOptimalThresholdLoading] = useState<boolean>(false);
-  const [optimalThreshold, setOptimalThreshold] = useState<OptimalThreshold | null>(null);
 
   // 提取信号日期范围
   const getDateRange = () => {
@@ -189,11 +173,6 @@ const BacktestSystem: React.FC<BacktestSystemProps> = ({ codeA, codeB, signals }
 
   const { minDate, maxDate } = getDateRange();
 
-  // 监听策略类型更改
-  const handleStrategyTypeChange = (value: string) => {
-    setStrategyType(value);
-  };
-
   // 初始化表单默认值
   React.useEffect(() => {
     form.setFieldsValue({
@@ -204,24 +183,21 @@ const BacktestSystem: React.FC<BacktestSystemProps> = ({ codeA, codeB, signals }
       initial_capital: 100000,
       position_size_type: 'percent',
       position_size: 10,
-      entry_threshold: 2.0,
-      exit_threshold: 0.5,
       stop_loss: 5,
       take_profit: 10,
       max_positions: 5,
       trading_fee: 0.0003,
       trailing_stop: 0,
       time_stop: 0,
-      breakeven_stop: false,
-      strategy_type: 'zscore',
       hedge_mode: 'single',
-      secondary_threshold: 1.0,
-      volatility_window: 20,
-      trend_window: 50,
-      adaptive_threshold: false,
-      adaptive_period: 60
+      // 设置新参数的默认值
+      polynomial_degree: 3,
+      anomaly_threshold: 2.0,
+      mean_reversion_exit: true,
+      mean_reversion_threshold: 0.5,
+      reverse_anomaly_exit: true
     });
-  }, [codeA, codeB, minDate, maxDate]);
+  }, [codeA, codeB, minDate, maxDate, form]);
 
   // 执行回测
   const runBacktest = async (values: any) => {
@@ -269,57 +245,6 @@ const BacktestSystem: React.FC<BacktestSystemProps> = ({ codeA, codeB, signals }
 
   const handleFormFinish = (values: any) => {
     runBacktest(values);
-  };
-
-  // 计算最优阈值
-  const calculateOptimalThreshold = async () => {
-    setOptimalThresholdLoading(true);
-    setError(null);
-    
-    try {
-      const currentStrategyType = form.getFieldValue('strategy_type');
-      const params = {
-        code_a: codeA,
-        code_b: codeB,
-        lookback: 60, // 默认使用60天的回溯期
-        strategy_type: currentStrategyType
-      };
-      
-      const response = await fetch('http://localhost:8000/calculate_optimal_threshold/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(params),
-      });
-      
-      if (!response.ok) {
-        throw new Error('计算最优阈值失败，请稍后重试');
-      }
-      
-      const data = await response.json();
-      
-      if (data.error) {
-        setError(data.error);
-        return;
-      }
-      
-      setOptimalThreshold(data);
-      
-      // 自动设置表单中的阈值
-      form.setFieldsValue({
-        entry_threshold: data.entry_threshold,
-        exit_threshold: data.exit_threshold
-      });
-      
-      // 显示成功提示
-      message.success(`已设置最优阈值：入场 ${data.entry_threshold.toFixed(2)}，出场 ${data.exit_threshold.toFixed(2)}`);
-    } catch (err) {
-      console.error('计算最优阈值错误:', err);
-      setError(err instanceof Error ? err.message : '计算最优阈值时发生错误');
-    } finally {
-      setOptimalThresholdLoading(false);
-    }
   };
 
   // 运行相似信号回测
@@ -401,6 +326,34 @@ const BacktestSystem: React.FC<BacktestSystemProps> = ({ codeA, codeB, signals }
             onFinish={handleFormFinish}
           >
             <Row gutter={16}>
+                            <Col span={24}>
+                <Divider />
+                <Title level={5}>策略设置</Title>
+              </Col>
+
+              <Col span={24}>
+                <Alert
+                  message="基于异常点检测的回测策略"
+                  description={
+                    <>
+                      <p>此回测策略基于价格比值曲线与拟合曲线之间的异常偏离点进行交易。系统检测到的异常点将作为入场信号，出场则基于多种策略组合。</p>
+                      <p><strong>入场信号</strong>：当价格比值相对于拟合曲线出现显著偏离（由异常点阈值控制），系统将识别为交易机会。</p>
+                      <p><strong>出场策略</strong>：可通过以下方式触发
+                        <ul>
+                          <li>价格比值回归到拟合曲线附近（回归均值出场）</li>
+                          <li>出现反向异常点信号（反向异常点出场）</li>
+                          <li>触发止盈止损条件</li>
+                          <li>到达最大持仓时间</li>
+                        </ul>
+                      </p>
+                    </>
+                  }
+                  type="info"
+                  showIcon
+                  style={{ marginBottom: 24 }}
+                />
+              </Col>
+
               <Col span={24}>
                 <Title level={5}>基本设置</Title>
               </Col>
@@ -437,26 +390,6 @@ const BacktestSystem: React.FC<BacktestSystemProps> = ({ codeA, codeB, signals }
                     style={{ width: '100%' }}
                     formatter={value => `￥ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
                   />
-                </Form.Item>
-              </Col>
-              
-              <Col span={24}>
-                <Divider />
-                <Title level={5}>策略设置</Title>
-              </Col>
-
-              <Col span={8}>
-                <Form.Item
-                  name="strategy_type"
-                  label="策略类型"
-                  rules={[{ required: true, message: '请选择策略类型' }]}
-                >
-                  <Select onChange={handleStrategyTypeChange}>
-                    <Option value="zscore">Z分数策略</Option>
-                    <Option value="percent">百分比偏离策略</Option>
-                    <Option value="volatility">波动率调整策略</Option>
-                    <Option value="trend">趋势跟踪策略</Option>
-                  </Select>
                 </Form.Item>
               </Col>
 
@@ -526,136 +459,72 @@ const BacktestSystem: React.FC<BacktestSystemProps> = ({ codeA, codeB, signals }
               
               <Col span={24}>
                 <Divider />
-                <Title level={5}>信号参数</Title>
-              </Col>
-              
-              <Col span={24} style={{ marginBottom: 16 }}>
-                <Row gutter={16} align="middle">
-                  <Col flex="auto">
-                    <Text>设置信号阈值参数</Text>
-                  </Col>
-                  <Col>
-                    <Tooltip title="自动计算最优入场和出场阈值，基于历史数据">
-                      <Button 
-                        type="primary" 
-                        ghost
-                        icon={<LineChartOutlined />}
-                        loading={optimalThresholdLoading}
-                        onClick={calculateOptimalThreshold}
-                      >
-                        计算最优阈值
-                      </Button>
-                    </Tooltip>
-                  </Col>
-                </Row>
-                {optimalThreshold && (
-                  <Alert
-                    style={{ marginTop: 12 }}
-                    message="最优阈值分析结果"
-                    description={
-                      <>
-                        <div>策略类型: {optimalThreshold.strategy_type === 'zscore' ? 'Z分数策略' : 
-                                        optimalThreshold.strategy_type === 'percent' ? '百分比偏离策略' : 
-                                        optimalThreshold.strategy_type === 'volatility' ? '波动率调整策略' : '趋势跟踪策略'}</div>
-                        <div>回溯天数: {optimalThreshold.lookback_period}天</div>
-                        <div>建议入场阈值: <Text strong>{optimalThreshold.entry_threshold.toFixed(2)}</Text></div>
-                        <div>建议出场阈值: <Text strong>{optimalThreshold.exit_threshold.toFixed(2)}</Text></div>
-                        <div>估计收益率: <Text type="success">{optimalThreshold.estimated_profit.toFixed(2)}%</Text></div>
-                        <div>胜率: {(optimalThreshold.win_rate * 100).toFixed(2)}%</div>
-                        <div>模拟交易次数: {optimalThreshold.trade_count}次</div>
-                      </>
-                    }
-                    type="info"
-                    showIcon
-                  />
-                )}
+                <Title level={5}>异常点检测参数</Title>
               </Col>
               
               <Col span={8}>
                 <Form.Item
-                  name="entry_threshold"
-                  label="入场阈值"
-                  tooltip="信号超过该阈值时开仓"
-                  rules={[{ required: true, message: '请输入入场阈值' }]}
+                  name="polynomial_degree"
+                  label="多项式拟合次数"
+                  tooltip="用于拟合价格比值曲线的多项式次数，数值越高拟合越精确但也可能过拟合"
+                  rules={[{ required: true, message: '请选择多项式拟合次数' }]}
                 >
-                  <InputNumber min={0.5} max={5} step={0.1} style={{ width: '100%' }} />
+                  <Select>
+                    <Option value={1}>1次多项式</Option>
+                    <Option value={2}>2次多项式</Option>
+                    <Option value={3}>3次多项式</Option>
+                    <Option value={4}>4次多项式</Option>
+                    <Option value={5}>5次多项式</Option>
+                    <Option value={6}>6次多项式</Option>
+                  </Select>
                 </Form.Item>
               </Col>
               
               <Col span={8}>
                 <Form.Item
-                  name="exit_threshold"
-                  label="出场阈值"
-                  tooltip="信号低于该阈值时平仓"
-                  rules={[{ required: true, message: '请输入出场阈值' }]}
+                  name="anomaly_threshold"
+                  label="异常点阈值"
+                  tooltip="检测异常点的阈值倍数，越大检测到的异常点越少但信号可靠性更高"
+                  rules={[{ required: true, message: '请输入异常点阈值' }]}
                 >
-                  <InputNumber min={0.1} max={2} step={0.1} style={{ width: '100%' }} />
+                  <InputNumber min={1.0} max={5.0} step={0.1} style={{ width: '100%' }} />
                 </Form.Item>
               </Col>
-
-              {strategyType !== 'zscore' && (
-                <Col span={8}>
-                  <Form.Item
-                    name="secondary_threshold"
-                    label={
-                      strategyType === 'percent' ? "百分比系数" : 
-                      strategyType === 'volatility' ? "波动调整系数" : 
-                      "趋势权重系数"
-                    }
-                    tooltip="策略特定参数，用于调整信号灵敏度"
-                  >
-                    <InputNumber min={0.1} max={5} step={0.1} style={{ width: '100%' }} />
-                  </Form.Item>
-                </Col>
-              )}
-              
-              {strategyType === 'volatility' && (
-                <Col span={8}>
-                  <Form.Item
-                    name="volatility_window"
-                    label="波动率窗口"
-                    tooltip="计算波动率的时间窗口（天）"
-                  >
-                    <InputNumber min={5} max={60} step={1} style={{ width: '100%' }} />
-                  </Form.Item>
-                </Col>
-              )}
-              
-              {strategyType === 'trend' && (
-                <Col span={8}>
-                  <Form.Item
-                    name="trend_window"
-                    label="趋势窗口"
-                    tooltip="计算长期趋势的时间窗口（天）"
-                  >
-                    <InputNumber min={20} max={200} step={5} style={{ width: '100%' }} />
-                  </Form.Item>
-                </Col>
-              )}
               
               <Col span={24}>
                 <Divider />
-                <Title level={5}>高级策略选项</Title>
+                <Title level={5}>出场策略设置</Title>
               </Col>
-
+              
               <Col span={8}>
                 <Form.Item
-                  name="adaptive_threshold"
-                  label="自适应阈值"
-                  tooltip="根据市场波动性自动调整入场和出场阈值"
+                  name="mean_reversion_exit"
+                  label="回归均值出场"
+                  tooltip="当价格比值回归到拟合曲线附近时平仓"
                   valuePropName="checked"
                 >
                   <Switch />
                 </Form.Item>
               </Col>
-
+              
               <Col span={8}>
                 <Form.Item
-                  name="adaptive_period"
-                  label="适应周期(天)"
-                  tooltip="计算自适应阈值的历史周期长度"
+                  name="mean_reversion_threshold"
+                  label="回归阈值倍数"
+                  tooltip="回归到拟合线多近时触发平仓（标准差的倍数）"
                 >
-                  <InputNumber min={20} max={120} step={10} style={{ width: '100%' }} />
+                  <InputNumber min={0.1} max={1.0} step={0.1} style={{ width: '100%' }} />
+                </Form.Item>
+              </Col>
+              
+              <Col span={8}>
+                <Form.Item
+                  name="reverse_anomaly_exit"
+                  label="反向异常点出场"
+                  tooltip="当出现与持仓方向相反的异常点信号时平仓"
+                  valuePropName="checked"
+                >
+                  <Switch />
                 </Form.Item>
               </Col>
               

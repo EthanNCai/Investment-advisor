@@ -80,7 +80,7 @@ def get_stock_data_pair(code_a: str, code_b: str) -> tuple:
         # 查询全部历史数据
         records = db.query_kline(
             stock_code=code,
-            start_date='2015-01-01',
+            start_date='1989-01-01',
             end_date=datetime.now().strftime('%Y-%m-%d')
         )
 

@@ -27,6 +27,7 @@ interface BacktestResultsProps {
       positions_value: number;
       signal: number;
       ratio: number;
+      anomaly_signal: number;
     }[];
     trades: any[];
     initial_capital: number;
@@ -48,9 +49,8 @@ interface BacktestResultsProps {
     profit_factor: number;
     avg_holding_period: number;
     strategy_parameters: {
-      strategy_type: string;
-      entry_threshold: number;
-      exit_threshold: number;
+      anomaly_threshold: number;
+      polynomial_degree: number;
       stop_loss: number;
       take_profit: number;
       trailing_stop: number;
@@ -58,6 +58,9 @@ interface BacktestResultsProps {
       hedge_mode: string;
       position_size_type: string;
       position_size: number;
+      mean_reversion_exit?: boolean;
+      mean_reversion_threshold?: number;
+      reverse_anomaly_exit?: boolean;
     };
   };
 }
@@ -94,7 +97,8 @@ const BacktestResults: React.FC<BacktestResultsProps> = ({ results }) => {
     cash: equity_curve.map(item => item.cash),
     positions: equity_curve.map(item => item.positions_value),
     signal: equity_curve.map(item => item.signal),
-    ratio: equity_curve.map(item => item.ratio)
+    ratio: equity_curve.map(item => item.ratio),
+    anomaly_signal: equity_curve.map(item => item.anomaly_signal)
   };
   
   // 获取图表选项
@@ -297,7 +301,7 @@ const BacktestResults: React.FC<BacktestResultsProps> = ({ results }) => {
         }
       },
       legend: {
-        data: ['信号值', '价格比值'],
+        data: ['价格比值', '拟合曲线', '异常点'],
         bottom: 0
       },
       grid: {
@@ -319,17 +323,10 @@ const BacktestResults: React.FC<BacktestResultsProps> = ({ results }) => {
       },
       yAxis: [
         {
-          name: '信号值',
+          name: '价格比值',
           type: 'value',
           position: 'left',
           axisLine: { lineStyle: { color: '#1890ff' } }
-        },
-        {
-          name: '价格比值',
-          type: 'value',
-          position: 'right',
-          splitLine: { show: false },
-          axisLine: { lineStyle: { color: '#fa8c16' } }
         }
       ],
       dataZoom: [
@@ -345,51 +342,24 @@ const BacktestResults: React.FC<BacktestResultsProps> = ({ results }) => {
       ],
       series: [
         {
-          name: '信号值',
+          name: '价格比值',
           type: 'line',
-          data: chartData.signal,
+          data: chartData.ratio,
           smooth: true,
           showSymbol: false,
           itemStyle: {
             color: '#1890ff'
-          },
-          markLine: {
-            silent: true,
-            lineStyle: {
-              color: '#333',
-              type: 'dashed'
-            },
-            data: [
-              {
-                yAxis: strategy_parameters.entry_threshold,
-                label: { show: true, formatter: '入场阈值' }
-              },
-              {
-                yAxis: -strategy_parameters.entry_threshold,
-                label: { show: true, formatter: '入场阈值' }
-              },
-              {
-                yAxis: strategy_parameters.exit_threshold,
-                label: { show: true, formatter: '出场阈值' }
-              },
-              {
-                yAxis: -strategy_parameters.exit_threshold,
-                label: { show: true, formatter: '出场阈值' }
-              },
-              { yAxis: 0, label: { show: false } }
-            ]
           }
         },
         {
-          name: '价格比值',
-          type: 'line',
-          yAxisIndex: 1,
-          data: chartData.ratio,
-          smooth: true,
-          showSymbol: false,
-          lineStyle: {
-            color: '#fa8c16',
-            width: 1
+          name: '异常点',
+          type: 'scatter',
+          data: equity_curve.map((item, index) => {
+            return [index, item.anomaly_signal !== 0 ? item.ratio : '-']; // 只显示异常点
+          }).filter(item => item[1] !== '-'),
+          symbolSize: 8,
+          itemStyle: {
+            color: '#ff4d4f'
           }
         }
       ]
@@ -466,12 +436,8 @@ const BacktestResults: React.FC<BacktestResultsProps> = ({ results }) => {
     return [
       {
         key: '1',
-        parameter: '策略类型',
-        value: strategy_parameters.strategy_type === 'zscore' ? 'Z分数策略' : 
-               strategy_parameters.strategy_type === 'percent' ? '百分比偏离策略' : 
-               strategy_parameters.strategy_type === 'volatility' ? '波动率调整策略' : 
-               strategy_parameters.strategy_type === 'trend' ? '趋势跟踪策略' : 
-               strategy_parameters.strategy_type
+        parameter: '异常检测策略',
+        value: '基于异常点的价差交易'
       },
       {
         key: '2',
@@ -480,13 +446,13 @@ const BacktestResults: React.FC<BacktestResultsProps> = ({ results }) => {
       },
       {
         key: '3',
-        parameter: '入场阈值',
-        value: strategy_parameters.entry_threshold
+        parameter: '多项式拟合次数',
+        value: strategy_parameters.polynomial_degree
       },
       {
         key: '4',
-        parameter: '出场阈值',
-        value: strategy_parameters.exit_threshold
+        parameter: '异常点阈值',
+        value: strategy_parameters.anomaly_threshold
       },
       {
         key: '5',
@@ -500,23 +466,38 @@ const BacktestResults: React.FC<BacktestResultsProps> = ({ results }) => {
       },
       {
         key: '7',
+        parameter: '回归均值出场',
+        value: strategy_parameters.mean_reversion_exit ? '启用' : '未启用'
+      },
+      {
+        key: '8',
+        parameter: '回归阈值倍数',
+        value: strategy_parameters.mean_reversion_threshold || '默认值'
+      },
+      {
+        key: '9',
+        parameter: '反向异常点出场',
+        value: strategy_parameters.reverse_anomaly_exit ? '启用' : '未启用'
+      },
+      {
+        key: '10',
         parameter: '追踪止损',
         value: strategy_parameters.trailing_stop > 0 ? `${strategy_parameters.trailing_stop}%` : '未启用'
       },
       {
-        key: '8',
+        key: '11',
         parameter: '时间止损',
         value: strategy_parameters.time_stop > 0 ? `${strategy_parameters.time_stop}天` : '未启用'
       },
       {
-        key: '9',
+        key: '12',
         parameter: '仓位计算方式',
         value: strategy_parameters.position_size_type === 'fixed' ? '固定金额' : 
                strategy_parameters.position_size_type === 'kelly' ? '凯利公式' : 
                '资金百分比'
       },
       {
-        key: '10',
+        key: '13',
         parameter: '仓位大小',
         value: strategy_parameters.position_size_type === 'fixed' ? 
                `￥${strategy_parameters.position_size}` : 

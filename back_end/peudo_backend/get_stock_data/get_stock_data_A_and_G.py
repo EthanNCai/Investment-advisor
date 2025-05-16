@@ -6,7 +6,8 @@ from typing import Dict, List, Union
 
 import requests
 
-MARKET_TYPE_MAPPING = {'116': '港股', '105': '美股', '113': '上海黄金期货', '118': '上海黄金现货'}
+MARKET_TYPE_MAPPING = {'116': '港股', '105': '美股', '113': '上海黄金期货', '118': '上海黄金现货',
+                       '122': '国际黄金现货', '101': '国家黄金期货', '100': '港股'}
 
 
 # 获取K线数据
@@ -36,7 +37,14 @@ class EastMoneyKLineSpider:
                          'AG9999', 'AG999'] or \
                 (code.startswith('AU') and ('TD' in code or 'TN' in code)):
             return '118'  # 上海黄金现货
-
+        # 现货黄金
+        elif code[-2:] == 'AU' or code[-2:] == 'AG':
+            return '122'
+        # 期货黄金
+        elif code[-3:] == '00Y':
+            return '101'
+        elif code.startswith('HS') and 3 <= len(code) <= 9 or code in ['DJIA', 'SPX', 'NDX']:
+            return '100'
         # 美股判断
         elif code.replace(".", "").isalpha() and 1 <= len(code) <= 5:
             return '105'  # 美股
@@ -79,11 +87,11 @@ class EastMoneyKLineSpider:
         }
 
         # 黄金参数
-        if self.market_type in ['113', '118']:
+        if self.market_type in ['113', '118', '101', '122', '100']:
             params = {
                 'fields1': 'f1,f2,f3,f4,f5,f6,f7,f8',
                 'fields2': 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64',
-                'lmt': '100000',  # 修改为100000，获取更多历史数据
+                'lmt': '100000',
                 'iscca': '1',
                 'ut': 'f057cbcbce2a86e2866ab8877db1d059',
                 'forcect': '1'
@@ -184,24 +192,21 @@ class EastMoneyKLineSpider:
 
     def get_market_name(self):
         # 将上海黄金期货和上海黄金现货统一归类为"黄金"类型
-        if self.market_type in ['113', '118']:
+        if self.market_type in ['113', '118', '101', '122']:
             return '黄金'
+        elif self.stock_code.upper() in ['SPX', 'DJIA', 'NDX']:
+            return '美股'
         return MARKET_TYPE_MAPPING.get(self.market_type, 'A股')
 
 
 # 使用示例
 if __name__ == "__main__":
     pass
-    # # 测试A股
-    # sh_spider = EastMoneyKLineSpider("000902")
-    # sh_data = sh_spider.get_klines()
-    # print(sh_data['name'])
-    # print(sh_data["klines"][-4:-1])
-    #
-    # # 测试港股
-    # hk_spider = EastMoneyKLineSpider("00700")
-    # hk_data = hk_spider.get_klines()
-    # print(hk_data['name'])
-    # print(hk_data['klines'][-3:-1])
-    # print(hk_spider.format_klines(hk_data['klines'])[-3:-1])
-    # print(len(hk_data['klines']))
+    # 测试A股
+    sh_spider = EastMoneyKLineSpider("GC00Y")
+    sh_data = sh_spider.get_klines()
+    print(sh_data['name'])
+    print(sh_data["klines"])
+    print(len(sh_data['klines']))
+
+

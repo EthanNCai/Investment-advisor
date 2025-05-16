@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Select, message, notification, Spin, Space, Tabs, Card, Typography } from 'antd';
+import { Select, message, notification, Spin, Space, Tabs, Card, Typography, Row, Col } from 'antd';
 import ReactECharts from 'echarts-for-react';
 import AnomalyDetection from './AnomalyDetection';
 import { SliderSelector } from '../selectors/SliderSelector';
@@ -9,6 +9,14 @@ import RatioIndicators from './RatioIndicators';
 
 // 使用Typography组件
 const { Text } = Typography;
+
+// K线类型定义
+const KLINE_TYPES = [
+  { label: "日K", value: "daily" },
+  { label: "周K", value: "weekly" },
+  { label: "月K", value: "monthly" },
+  { label: "年K", value: "yearly" }
+];
 
 // 时间跨度定义，用于界面展示和后端交互
 interface DurationOption {
@@ -68,6 +76,8 @@ const RatioAnalysis: React.FC = () => {
   const [anomalyThreshold, setAnomalyThreshold] = useLocalStorage<number>('ratio-analysis-threshold', 2.0);
   const [showDelta, setShowDelta] = useLocalStorage<boolean>('ratio-analysis-showDelta', true);
   const [activeTab, setActiveTab] = useLocalStorage<string>('ratio-analysis-activeTab', '1');
+  // 添加K线类型状态
+  const [klineType, setKlineType] = useLocalStorage<string>('ratio-analysis-klineType', 'daily');
   
   // 这些不需要持久化的状态
   const [stockList, setStockList] = useState<StockInfo[]>([]);
@@ -93,7 +103,7 @@ const RatioAnalysis: React.FC = () => {
   useEffect(() => {
     if (selectedStockA && selectedStockB && !chartData) {
       console.log("从持久化存储恢复数据，加载图表:", selectedStockA, selectedStockB);
-      updateChart(selectedStockA, selectedStockB, selectedDuration, selectedDegree, anomalyThreshold, false);
+      updateChart(selectedStockA, selectedStockB, selectedDuration, selectedDegree, anomalyThreshold, false, klineType);
     }
   }, []);
 
@@ -101,7 +111,7 @@ const RatioAnalysis: React.FC = () => {
   useEffect(() => {
     if (selectedStockA && selectedStockB) {
       console.log("两只股票都已选择，自动加载数据:", selectedStockA, selectedStockB);
-      updateChart(selectedStockA, selectedStockB, selectedDuration, selectedDegree, anomalyThreshold, false);
+      updateChart(selectedStockA, selectedStockB, selectedDuration, selectedDegree, anomalyThreshold, false, klineType);
     }
   }, [selectedStockA, selectedStockB]);
 
@@ -112,7 +122,8 @@ const RatioAnalysis: React.FC = () => {
     duration: string = selectedDuration, 
     degree: number = selectedDegree, 
     threshold: number = anomalyThreshold,
-    isThresholdAdjustment: boolean = false
+    isThresholdAdjustment: boolean = false,
+    kline: string = klineType
   ) => {
     if (!stockA || !stockB) {
       message.warning('请选择两只股票');
@@ -129,6 +140,7 @@ const RatioAnalysis: React.FC = () => {
     try {
       // 记录传递给后端的值
       console.log("发送到后端的时间跨度:", duration);
+      console.log("发送到后端的K线类型:", kline);
       
       const response = await fetch('http://localhost:8000/get_k_chart_info/', {
         method: 'POST',
@@ -140,7 +152,8 @@ const RatioAnalysis: React.FC = () => {
           code_b: stockB,
           duration: duration, 
           degree: degree,
-          threshold_arg: threshold
+          threshold_arg: threshold,
+          kline_type: kline
         }),
       });
       
@@ -272,25 +285,78 @@ const RatioAnalysis: React.FC = () => {
     // 使用异常信息中的边界值
     const { upper_bound, lower_bound } = chartData.anomaly_info;
     
+    // 处理异常点，按照联合分析中的样式分为红色区域和绿色区域
+    const getAnomalyAreas = () => {
+      if (!chartData || !chartData.anomaly_info.anomalies.length) {
+        return { redAreas: [], greenAreas: [] };
+      }
+      
+      // 定义类型为[string, number][]的数组，表示[日期, 值]对的数组
+      const redAreas: Array<[string, number]> = []; // 价格比值低于拟合线的区域，表示做多第一个资产做空第二个资产
+      const greenAreas: Array<[string, number]> = []; // 价格比值高于拟合线的区域，表示做空第一个资产做多第二个资产
+      
+      chartData.anomaly_info.anomalies.forEach(anomaly => {
+        const index = anomaly.index;
+        if (index < chartData.dates.length && index < chartData.ratio.length && index < chartData.fitting_line.length) {
+          const date = chartData.dates[index];
+          const ratioValue = chartData.ratio[index];
+          const fittingValue = chartData.fitting_line[index];
+          const diff = ratioValue - fittingValue;
+          
+          if (diff > 0) {
+            // 价格比值高于拟合线，绿色区域
+            greenAreas.push([date, ratioValue]);
+          } else {
+            // 价格比值低于拟合线，红色区域
+            redAreas.push([date, ratioValue]);
+          }
+        }
+      });
+      
+      return { redAreas, greenAreas };
+    };
+    
+    const { redAreas, greenAreas } = getAnomalyAreas();
+    
     return {
+      animation: false, // 禁用动画以减少闪烁
       title: {
         text: '股票价格比值分析',
         left: 'center'
       },
       tooltip: {
         trigger: 'axis',
+        enterable: false, // 防止鼠标进入tooltip导致的闪烁
+        confine: true, // 将tooltip限制在图表区域内
         formatter: function(params: any) {
           const dateIndex = params[0].dataIndex;
           const date = chartData.dates[dateIndex];
           let html = `<div><strong>${date}</strong></div>`;
           
           params.forEach((param: any) => {
+            // 检查param.value的类型，确保正确应用toFixed
+            let formattedValue = '';
+            if (param.value !== null && param.value !== undefined) {
+              // 数组类型的值 [date, value]，用于散点图
+              if (Array.isArray(param.value)) {
+                formattedValue = param.value[1].toFixed(4);
+              } 
+              // 数字类型的值，用于线图
+              else if (typeof param.value === 'number') {
+                formattedValue = param.value.toFixed(4);
+              }
+              // 其他类型的值，转为字符串
+              else {
+                formattedValue = String(param.value);
+              }
+            }
+            
             if (param.seriesName === '比值') {
-              html += `<div>${param.seriesName}: ${param.value.toFixed(4)}</div>`;
+              html += `<div>${param.seriesName}: ${formattedValue}</div>`;
               html += `<div>股票A价格: ${chartData.close_a[dateIndex].toFixed(2)}</div>`;
               html += `<div>股票B价格: ${chartData.close_b[dateIndex].toFixed(2)}</div>`;
             } else {
-              html += `<div>${param.seriesName}: ${param.value.toFixed(4)}</div>`;
+              html += `<div>${param.seriesName}: ${formattedValue}</div>`;
             }
           });
           
@@ -303,11 +369,36 @@ const RatioAnalysis: React.FC = () => {
           }
           
           return html;
+        },
+        axisPointer: {
+          type: 'cross',
+          snap: true,
+          animation: false, // 禁用指针动画
+          lineStyle: {
+            type: 'dashed'
+          },
+          triggerTooltip: false // 禁用指针触发tooltip重新渲染
         }
       },
+      // 设置全局防抖，减少重绘频率
+      throttle: 100,
+      // 关闭渐进式渲染
+      progressive: 0,
+      // 减少交互元素的选中和高亮
+      selectedMode: false,
+      hoverLayerThreshold: Infinity,
+      useUTC: true,
       legend: {
-        data: ['比值', '拟合线', '上边界', '下边界'],
-        top: 30
+        data: ['比值', '拟合线', '上边界', '下边界', '绿色区域', '红色区域'],
+        top: 30,
+        animation: false, // 禁用图例动画
+        selected: {
+          '拟合线': true,
+          '上边界': true,
+          '下边界': true,
+          '绿色区域': true,
+          '红色区域': true
+        }
       },
       grid: {
         left: '3%',
@@ -324,11 +415,17 @@ const RatioAnalysis: React.FC = () => {
             return `${date.getMonth() + 1}/${date.getDate()}`;
           },
           interval: Math.floor(chartData.dates.length / 10)
+        },
+        axisPointer: {
+          animation: false // 禁用x轴指针的动画
         }
       },
       yAxis: {
         type: 'value',
-        scale: true
+        scale: true,
+        axisPointer: {
+          animation: false // 禁用y轴指针的动画
+        }
       },
       dataZoom: [
         {
@@ -355,30 +452,8 @@ const RatioAnalysis: React.FC = () => {
             scale: true,
             symbolSize: 6
           },
-          markPoint: {
-            data: getAnomalyMarkPoints(),
-            symbol: 'circle',
-            symbolSize: 6,
-            label: {
-              show: false  // 不显示标签文字
-            }
-          },
-          markArea: {
-            silent: true,
-            data: [
-              [
-                {
-                  yAxis: upper_bound,
-                  itemStyle: {
-                    color: 'rgba(255, 77, 79, 0.1)'
-                  }
-                },
-                {
-                  yAxis: lower_bound
-                }
-              ]
-            ]
-          }
+          animation: false, // 禁用线图动画
+          hoverAnimation: false // 禁用悬停动画
         },
         {
           name: '拟合线',
@@ -388,7 +463,11 @@ const RatioAnalysis: React.FC = () => {
             type: 'dashed',
             width: 2
           },
-          symbol: 'none'
+          symbol: 'none',
+          animation: false, // 禁用动画
+          hoverAnimation: false, // 禁用悬停动画
+          silent: true, // 使该系列不响应鼠标交互
+          z: 1 // 降低z-index使其不参与tooltip等交互
         },
         {
           name: '上边界',
@@ -398,7 +477,11 @@ const RatioAnalysis: React.FC = () => {
             type: 'dotted',
             color: '#ff4d4f'
           },
-          symbol: 'none'
+          symbol: 'none',
+          animation: false, // 禁用动画
+          hoverAnimation: false, // 禁用悬停动画
+          silent: true, // 使该系列不响应鼠标交互
+          z: 1 // 降低z-index使其不参与tooltip等交互
         },
         {
           name: '下边界',
@@ -408,7 +491,37 @@ const RatioAnalysis: React.FC = () => {
             type: 'dotted',
             color: '#ff4d4f'
           },
-          symbol: 'none'
+          symbol: 'none',
+          animation: false, // 禁用动画
+          hoverAnimation: false, // 禁用悬停动画
+          silent: true, // 使该系列不响应鼠标交互
+          z: 1 // 降低z-index使其不参与tooltip等交互
+        },
+        // 添加绿色区域散点
+        {
+          name: '绿色区域',
+          type: 'scatter',
+          data: greenAreas,
+          symbol: 'circle',
+          symbolSize: 8,
+          itemStyle: {
+            color: '#91CC75'  // 绿色，与联合分析保持一致
+          },
+          animation: false, // 禁用动画
+          hoverAnimation: false // 禁用悬停动画
+        },
+        // 添加红色区域散点
+        {
+          name: '红色区域',
+          type: 'scatter',
+          data: redAreas,
+          symbol: 'circle',
+          symbolSize: 8,
+          itemStyle: {
+            color: '#EE6666'  // 红色，与联合分析保持一致
+          },
+          animation: false, // 禁用动画
+          hoverAnimation: false // 禁用悬停动画
         }
       ]
     };
@@ -432,6 +545,34 @@ const RatioAnalysis: React.FC = () => {
     const maxDelta = Math.max(...chartData.delta.map(d => Math.abs(d)));
     const yAxisMax = Math.max(actualThreshold * 1.5, maxDelta * 1.2);
     const yAxisMin = -yAxisMax; // 保持对称
+
+    // 处理异常点，按照联合分析中的样式分为红色区域和绿色区域
+    const getAnomalyPoints = () => {
+      const positivePoints: Array<[string, number]> = []; // 正差值点
+      const negativePoints: Array<[string, number]> = []; // 负差值点
+      
+      if (!chartData || !chartData.anomaly_info.anomalies.length) {
+        return { positivePoints, negativePoints };
+      }
+      
+      chartData.anomaly_info.anomalies.forEach(anomaly => {
+        const index = anomaly.index;
+        if (index < chartData.dates.length && index < chartData.delta.length) {
+          const date = chartData.dates[index];
+          const deltaValue = chartData.delta[index];
+          
+          if (deltaValue > 0) {
+            positivePoints.push([date, deltaValue]);
+          } else {
+            negativePoints.push([date, deltaValue]);
+          }
+        }
+      });
+      
+      return { positivePoints, negativePoints };
+    };
+    
+    const { positivePoints, negativePoints } = getAnomalyPoints();
     
     return {
       title: {
@@ -443,10 +584,22 @@ const RatioAnalysis: React.FC = () => {
         formatter: function(params: any) {
           const dateIndex = params[0].dataIndex;
           const date = chartData.dates[dateIndex];
-          const delta = params[0].value;
+          
+          // 获取差值，处理不同类型的值
+          let deltaValue = '';
+          const paramValue = params[0].value;
+          if (paramValue !== null && paramValue !== undefined) {
+            if (Array.isArray(paramValue)) {
+              deltaValue = paramValue[1].toFixed(4);
+            } else if (typeof paramValue === 'number') {
+              deltaValue = paramValue.toFixed(4);
+            } else {
+              deltaValue = String(paramValue);
+            }
+          }
           
           let html = `<div><strong>${date}</strong></div>`;
-          html += `<div>差值: ${delta.toFixed(4)}</div>`;
+          html += `<div>差值: ${deltaValue}</div>`;
           html += `<div>阈值: ±${actualThreshold.toFixed(4)}</div>`;
           html += `<div>标准差: ${threshold.toFixed(4)}</div>`;
           html += `<div>阈值倍数: ${anomalyThreshold.toFixed(1)}</div>`;
@@ -504,6 +657,7 @@ const RatioAnalysis: React.FC = () => {
       ],
       series: [
         {
+          name: '差值',
           type: 'line',
           data: chartData.delta,
           showSymbol: false,  // 默认不显示数据点
@@ -580,43 +734,28 @@ const RatioAnalysis: React.FC = () => {
                 }
               }
             ]
-          },
-          markPoint: {
-            data: chartData.anomaly_info.anomalies.map(anomaly => {
-              // 修改异常点判定条件，仅当Z分数>3或偏离度>15%时为极端异常
-              const isExtreme = Math.abs(anomaly.z_score) > 3 || Math.abs(anomaly.deviation) > 0.15;
-              // 获取当前异常点的差值
-              const deltaValue = chartData.delta[anomaly.index];
-              // 根据差值的正负来决定颜色
-              const color = deltaValue > 0 ? '#1890ff' : '#faad14'; // 正值为蓝色，负值为黄色
-              
-              return {
-                name: '', // 移除异常点名称，避免显示"异常点"文字
-                value: chartData.delta[anomaly.index],
-                xAxis: anomaly.index,
-                yAxis: chartData.delta[anomaly.index],
-                itemStyle: {
-                  // 使用基于差值的颜色
-                  color: color,
-                  shadowBlur: isExtreme ? 10 : 5,
-                  shadowColor: 'rgba(0, 0, 0, 0.5)',
-                  borderColor: '#fff',
-                  borderWidth: isExtreme ? 2 : 1
-                },
-                symbol: isExtreme ? 'diamond' : 'circle',
-                symbolSize: isExtreme ? 14 : anomaly.z_score > 2.5 ? 10 : 8,
-                label: {
-                  show: false, // 完全禁用标签显示
-                  distance: 5,
-                  color: '#ff0000',
-                  fontWeight: 'bold'
-                },
-                emphasis: {
-                  scale: true,
-                  scaleSize: 2
-                }
-              };
-            })
+          }
+        },
+        // 添加正差值异常点
+        {
+          name: '正差值异常',
+          type: 'scatter',
+          data: positivePoints,
+          symbol: 'circle',
+          symbolSize: 8,
+          itemStyle: {
+            color: '#91CC75'  // 绿色，与联合分析保持一致
+          }
+        },
+        // 添加负差值异常点
+        {
+          name: '负差值异常',
+          type: 'scatter',
+          data: negativePoints,
+          symbol: 'circle',
+          symbolSize: 8,
+          itemStyle: {
+            color: '#EE6666'  // 红色，与联合分析保持一致
           }
         }
       ]
@@ -729,6 +868,34 @@ const RatioAnalysis: React.FC = () => {
     }
   };
 
+  // 添加K线类型处理函数
+  const handleKlineTypeChange = (value: string) => {
+    console.log("选择的K线类型:", value);
+    setKlineType(value);
+    // 直接传递新值给updateChart，不依赖于state更新
+    if (selectedStockA && selectedStockB) {
+      updateChart(selectedStockA, selectedStockB, selectedDuration, selectedDegree, anomalyThreshold, false, value);
+    }
+  };
+
+  useEffect(() => {
+    if (chartData) {
+      // 在组件挂载后向Window添加防抖的mousemove处理
+      const handleWindowMouseMove = () => {
+        // 一个空的函数来捕获全局的鼠标移动事件
+        // 这可以减少ECharts图表的重绘频率
+      };
+      
+      // 添加全局的mousemove监听
+      window.addEventListener('mousemove', handleWindowMouseMove, { passive: true });
+      
+      // 清理
+      return () => {
+        window.removeEventListener('mousemove', handleWindowMouseMove);
+      };
+    }
+  }, [chartData]);
+
   return (
     <div className="ratio-analysis-container">
       <Card>
@@ -771,6 +938,21 @@ const RatioAnalysis: React.FC = () => {
             </Space>
             
             <Space>
+              <Text>K线类型:</Text>
+              <Select
+                style={{ width: 120 }}
+                value={klineType}
+                onChange={handleKlineTypeChange}
+              >
+                {KLINE_TYPES.map(option => (
+                  <Select.Option key={option.value} value={option.value}>
+                    {option.label}
+                  </Select.Option>
+                ))}
+              </Select>
+            </Space>
+            
+            <Space>
               <Text>时间跨度:</Text>
               <Select
                 style={{ width: 120 }}
@@ -797,6 +979,7 @@ const RatioAnalysis: React.FC = () => {
                 <Select.Option value={3}>3次多项式</Select.Option>
                 <Select.Option value={4}>4次多项式</Select.Option>
                 <Select.Option value={5}>5次多项式</Select.Option>
+                <Select.Option value={6}>6次多项式</Select.Option>
               </Select>
             </Space>
             
@@ -816,6 +999,29 @@ const RatioAnalysis: React.FC = () => {
           </Space>
         </div>
 
+        {/* 添加异常点标记说明 */}
+        {chartData && (
+          <div style={{ marginBottom: 16 }}>
+            <Row>
+              <Col span={12}>
+                <div className="anomaly-marker">
+                  <span className="marker" style={{ backgroundColor: '#91CC75', display: 'inline-block', width: 12, height: 12, marginRight: 4, borderRadius: '50%' }}></span>
+                  <span className="text">绿色区域: 做空股票A做多股票B</span>
+                </div>
+              </Col>
+              <Col span={12}>
+                <div className="anomaly-marker">
+                  <span className="marker" style={{ backgroundColor: '#EE6666', display: 'inline-block', width: 12, height: 12, marginRight: 4, borderRadius: '50%' }}></span>
+                  <span className="text">红色区域: 做多股票A做空股票B</span>
+                </div>
+              </Col>
+            </Row>
+            <div style={{ fontSize: '0.85em', color: '#888', marginTop: 4 }}>
+              注: 绿色区域表示比值高于拟合线，红色区域表示比值低于拟合线
+            </div>
+          </div>
+        )}
+
         {loading ? (
           <div style={{ textAlign: 'center', padding: '50px 0' }}>
             <Spin size="large" tip="加载中..." />
@@ -833,14 +1039,23 @@ const RatioAnalysis: React.FC = () => {
                     <ReactECharts
                       option={getRatioChartOption()}
                       style={{ height: 400 }}
-                      notMerge={true}
+                      notMerge={false}
+                      lazyUpdate={true}
                       key={`ratio-chart-${anomalyThreshold}-${chartData._timestamp || 'default'}`}
+                      opts={{ renderer: 'canvas', devicePixelRatio: 1 }}
+                      onEvents={{
+                        // 阻止鼠标移动事件频繁触发tooltip更新
+                        mousemove: (params: any) => {
+                          // 什么都不做，只捕获事件
+                        }
+                      }}
                     />
                     {showDelta && (
                       <ReactECharts
                         option={getDeltaChartOption()}
                         style={{ height: 300, marginTop: 16 }}
-                        notMerge={true}
+                        notMerge={false}
+                        lazyUpdate={true}
                         key={`delta-chart-${anomalyThreshold}-${chartData._timestamp || 'default'}`}
                         opts={{ renderer: 'svg' }}
                       />

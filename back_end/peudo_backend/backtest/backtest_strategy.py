@@ -1,15 +1,33 @@
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-from typing import Dict, List, Any, Optional, Tuple, Union
+from typing import Dict, List, Any, Optional, Tuple, Union, Set
 import math
+import json
 
 # 从现有模块导入函数
 from k_chart_fetcher import get_stock_data_pair, date_alignment, durations
 from indicators.investment_signals import analyze_current_position, generate_investment_signals
-
+from indicators.technical_indicators import calculate_price_ratio_anomaly
 from get_stock_data.stock_trends_base import StockTrendsDatabase
 
+# 在类定义外添加辅助函数
+def convert_numpy_types(obj):
+    """将NumPy数据类型转换为标准Python类型，使其可JSON序列化"""
+    if isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, (datetime, pd.Timestamp)):
+        return obj.isoformat()
+    elif isinstance(obj, dict):
+        return {key: convert_numpy_types(value) for key, value in obj.items()}
+    elif isinstance(obj, list) or isinstance(obj, tuple):
+        return [convert_numpy_types(item) for item in obj]
+    else:
+        return obj
 
 class BacktestEngine:
     def __init__(self):
@@ -18,7 +36,7 @@ class BacktestEngine:
 
     def run_price_ratio_backtest(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """
-        运行价差交易回测
+        运行价差交易回测 - 基于异常点检测
 
         参数:
             params: 回测参数字典，包含：
@@ -29,19 +47,15 @@ class BacktestEngine:
                 - initial_capital: 初始资金
                 - position_size_type: 仓位计算方式 ('fixed'/'percent'/'kelly')
                 - position_size: 仓位大小
-                - entry_threshold: 入场阈值
-                - exit_threshold: 出场阈值
                 - stop_loss: 止损比例(%)
                 - take_profit: 止盈比例(%)
                 - max_positions: 最大持仓数量
                 - trading_fee: 交易费率
                 - trailing_stop: 追踪止损(%) 可选
                 - time_stop: 最长持仓时间(天) 可选
-                - strategy_type: 策略类型 ('zscore'/'percent'/'volatility'/'trend')
                 - hedge_mode: 对冲模式 ('single'/'pair') 单边或双边交易
-                - risk_reward_ratio: 风险收益比 可选
-                - breakeven_stop: 是否使用保本止损 可选
-                - adaptive_threshold: 是否使用自适应阈值 可选
+                - polynomial_degree: 拟合曲线的多项式次数
+                - anomaly_threshold: 异常检测阈值
 
         返回:
             回测结果字典
@@ -55,8 +69,6 @@ class BacktestEngine:
             initial_capital = float(params.get('initial_capital', 100000))
             position_size_type = params.get('position_size_type', 'percent')
             position_size = float(params.get('position_size', 10))
-            entry_threshold = float(params.get('entry_threshold', 2.0))
-            exit_threshold = float(params.get('exit_threshold', 0.5))
             stop_loss = float(params.get('stop_loss', 5)) / 100  # 转换为小数
             take_profit = float(params.get('take_profit', 10)) / 100  # 转换为小数
             max_positions = int(params.get('max_positions', 5))
@@ -65,22 +77,16 @@ class BacktestEngine:
             # 新增参数
             trailing_stop = float(params.get('trailing_stop', 0)) / 100  # 追踪止损百分比
             time_stop = int(params.get('time_stop', 0))  # 最长持仓时间（天）
-            strategy_type = params.get('strategy_type', 'zscore')  # 策略类型
             hedge_mode = params.get('hedge_mode', 'single')  # 对冲模式
-            risk_reward_ratio = float(params.get('risk_reward_ratio', 2.0))  # 风险收益比
-            breakeven_stop = params.get('breakeven_stop', False)  # 是否使用保本止损
 
-            # 新增自适应阈值参数
-            adaptive_threshold = params.get('adaptive_threshold', False)  # 是否使用自适应阈值
-            adaptive_period = int(params.get('adaptive_period', 60))  # 适应周期
+            # 异常检测相关参数
+            polynomial_degree = int(params.get('polynomial_degree', 3))  # 多项式拟合次数
+            anomaly_threshold = float(params.get('anomaly_threshold', 2.0))  # 异常检测阈值
 
-            # 设置波动率窗口
-            volatility_window = int(params.get('volatility_window', 20))
-            # 设置趋势判断参数
-            trend_window = int(params.get('trend_window', 50))
-
-            # 设置交易相关的阈值参数（对于不同策略类型有不同的解释）
-            secondary_threshold = float(params.get('secondary_threshold', 1.0))
+            # 新增出场策略参数
+            mean_reversion_exit = params.get('mean_reversion_exit', True)  # 回归均值出场
+            mean_reversion_threshold = float(params.get('mean_reversion_threshold', 0.5))  # 回归均值阈值
+            reverse_anomaly_exit = params.get('reverse_anomaly_exit', True)  # 反向异常点出场
 
             # 获取历史K线数据
             close_a_, close_b_, dates_a_, dates_b_ = get_stock_data_pair(code_a, code_b)
@@ -93,7 +99,6 @@ class BacktestEngine:
             dates_filtered = [dates[i] for i in range(len(dates)) if mask[i]]
             close_a_filtered = [close_a[i] for i in range(len(close_a)) if mask[i]]
             close_b_filtered = [close_b[i] for i in range(len(close_b)) if mask[i]]
-
             if len(dates_filtered) < 20:
                 return {"error": f"时间范围内数据不足，无法进行回测。至少需要20个交易日的数据。"}
 
@@ -115,121 +120,52 @@ class BacktestEngine:
             df['return_b'] = df['close_b'].pct_change()
             df['ratio_return'] = df['ratio'].pct_change()
 
-            # 基于不同策略类型进行相应的计算
-            if strategy_type == 'zscore':
-                # Z分数策略 - 使用滚动均值和标准差
-                window = 60
-                df['ratio_ma'] = df['ratio'].rolling(window=window).mean()
-                df['ratio_std'] = df['ratio'].rolling(window=window).std()
-                df['zscore'] = (df['ratio'] - df['ratio_ma']) / df['ratio_std']
-                df['signal'] = df['zscore']
+            # 生成比值拟合曲线
+            x = np.arange(len(df))
+            y = df['ratio'].values
+            # 使用多项式拟合
+            poly_model = np.polyfit(x, y, polynomial_degree)
+            poly_func = np.poly1d(poly_model)
+            # 计算拟合值
+            df['fitting_line'] = poly_func(x)
+            # 计算与拟合线的差值
+            df['delta'] = df['ratio'] - df['fitting_line']
+            # 计算整个时间范围的标准差
+            delta_array = np.array(df['delta'].values)
+            std_value = np.std(delta_array)
 
-                # 自适应阈值调整
-                if adaptive_threshold:
-                    # 计算历史波动率百分位数
-                    df['vol_percentile'] = df['ratio_std'].rolling(window=adaptive_period).apply(
-                        lambda x: percentile_rank(x[-1], x), raw=True)
+            # 保留原有的移动平均线，可用于其他分析
+            df['ratio_ma'] = df['ratio'].rolling(window=60).mean().fillna(df['ratio'])
 
-                    # 根据波动率百分位调整入场和出场阈值
-                    df['adaptive_entry_threshold'] = entry_threshold * (1 + (df['vol_percentile'] - 0.5))
-                    df['adaptive_exit_threshold'] = exit_threshold * (1 + (df['vol_percentile'] - 0.5))
+            # 将标准差值存储在DataFrame中方便后续使用
+            df['ratio_std'] = std_value  # 使用相同的标准差值填充整列
 
-                    # 记录调整后的阈值用于判断
-                    df['entry_threshold'] = df['adaptive_entry_threshold']
-                    df['exit_threshold'] = df['adaptive_exit_threshold']
-                else:
-                    # 使用固定阈值
-                    df['entry_threshold'] = entry_threshold
-                    df['exit_threshold'] = exit_threshold
+            # 进行异常检测
+            ratio_data = df['ratio'].tolist()
+            delta_data = df['delta'].tolist()
+            # 使用计算出的全局标准差
 
-            elif strategy_type == 'percent':
-                # 百分比偏离策略 - 相对于移动平均的偏离百分比
-                window = 60
-                df['ratio_ma'] = df['ratio'].rolling(window=window).mean()
-                df['percent_deviation'] = (df['ratio'] - df['ratio_ma']) / df['ratio_ma'] * 100
-                df['signal'] = df['percent_deviation'] / secondary_threshold  # 标准化信号
+            # 执行异常检测
+            anomaly_result = calculate_price_ratio_anomaly(ratio_data, delta_data, anomaly_threshold, std_value)
 
-                # 自适应阈值
-                if adaptive_threshold:
-                    # 计算历史偏离百分比的波动性
-                    df['dev_std'] = df['percent_deviation'].rolling(window=adaptive_period).std()
-                    df['vol_percentile'] = df['dev_std'].rolling(window=adaptive_period).apply(
-                        lambda x: percentile_rank(x[-1], x), raw=True)
+            # 创建异常点标记列，并初始化为0
+            df['anomaly_signal'] = 0
 
-                    # 根据波动性调整阈值
-                    df['entry_threshold'] = entry_threshold * (1 + (df['vol_percentile'] - 0.5))
-                    df['exit_threshold'] = exit_threshold * (1 + (df['vol_percentile'] - 0.5))
-                else:
-                    df['entry_threshold'] = entry_threshold
-                    df['exit_threshold'] = exit_threshold
+            # 将异常点信息整合到DataFrame中
+            for anomaly in anomaly_result['anomalies']:
+                idx = anomaly['index']
+                if idx < len(df):
+                    # 根据异常点相对于拟合线的位置确定方向
+                    # 如果比值高于拟合线，做空资产A做多资产B
+                    # 如果比值低于拟合线，做多资产A做空资产B
+                    if df['delta'].iloc[idx] > 0:
+                        df.loc[df.index[idx], 'anomaly_signal'] = 1  # 做空A做多B
+                    else:
+                        df.loc[df.index[idx], 'anomaly_signal'] = -1  # 做多A做空B
 
-            elif strategy_type == 'volatility':
-                # 波动率调整策略 - 考虑市场波动率的Z分数
-                window = 60
-                vol_window = volatility_window
-                df['ratio_ma'] = df['ratio'].rolling(window=window).mean()
-                df['ratio_std'] = df['ratio'].rolling(window=window).std()
-                # 计算动态波动率
-                df['volatility'] = df['ratio_return'].rolling(window=vol_window).std() * np.sqrt(252)
-                # 使用相对波动率调整Z分数
-                df['vol_adj_factor'] = df['volatility'].rolling(window=vol_window).mean() / df['volatility']
-                df['vol_adj_factor'] = df['vol_adj_factor'].fillna(1)
-                # 波动率调整后的Z分数
-                df['zscore'] = (df['ratio'] - df['ratio_ma']) / df['ratio_std']
-                df['vol_adj_zscore'] = df['zscore'] * df['vol_adj_factor']
-                df['signal'] = df['vol_adj_zscore']
-
-                # 波动率策略天然带有自适应特性，但也可以增强
-                if adaptive_threshold:
-                    # 计算EWMA波动率，对近期波动更敏感
-                    df['ewma_vol'] = df['ratio_return'].ewm(span=vol_window).std() * np.sqrt(252)
-                    df['vol_ratio'] = df['ewma_vol'] / df['volatility'].rolling(window=adaptive_period).mean()
-
-                    # 根据当前波动率与历史平均的比例调整阈值
-                    df['entry_threshold'] = entry_threshold * np.sqrt(df['vol_ratio'])
-                    df['exit_threshold'] = exit_threshold * np.sqrt(df['vol_ratio'])
-                else:
-                    df['entry_threshold'] = entry_threshold
-                    df['exit_threshold'] = exit_threshold
-
-            elif strategy_type == 'trend':
-                # 趋势跟踪策略 - 考虑价格比率的趋势方向
-                window = 60
-                short_window = 20
-                long_window = trend_window
-                # 计算基本指标
-                df['ratio_ma'] = df['ratio'].rolling(window=window).mean()
-                df['ratio_std'] = df['ratio'].rolling(window=window).std()
-                df['zscore'] = (df['ratio'] - df['ratio_ma']) / df['ratio_std']
-                # 计算趋势指标
-                df['short_ma'] = df['ratio'].rolling(window=short_window).mean()
-                df['long_ma'] = df['ratio'].rolling(window=long_window).mean()
-                df['trend'] = np.where(df['short_ma'] > df['long_ma'], 1, -1)
-
-                # 计算趋势强度 - 短期均线与长期均线差值相对于长期均线的百分比
-                df['trend_strength'] = abs((df['short_ma'] - df['long_ma']) / df['long_ma'])
-
-                # 综合Z分数、趋势方向和趋势强度
-                df['signal'] = df['zscore'] * df['trend'] * (1 + df['trend_strength'] * secondary_threshold)
-
-                # 自适应阈值
-                if adaptive_threshold:
-                    # 根据趋势强度调整阈值
-                    df['entry_threshold'] = entry_threshold * (1 - df['trend_strength'] * 0.5)  # 趋势强时降低入场门槛
-                    df['exit_threshold'] = exit_threshold * (1 + df['trend_strength'])  # 趋势强时提高出场门槛
-                else:
-                    df['entry_threshold'] = entry_threshold
-                    df['exit_threshold'] = exit_threshold
-
-            else:
-                # 默认使用Z分数策略
-                window = 60
-                df['ratio_ma'] = df['ratio'].rolling(window=window).mean()
-                df['ratio_std'] = df['ratio'].rolling(window=window).std()
-                df['zscore'] = (df['ratio'] - df['ratio_ma']) / df['ratio_std']
-                df['signal'] = df['zscore']
-                df['entry_threshold'] = entry_threshold
-                df['exit_threshold'] = exit_threshold
+                    # 存储异常点的z_score和deviation，用于信号强度判断
+                    df.loc[df.index[idx], 'z_score'] = anomaly['z_score']
+                    df.loc[df.index[idx], 'deviation'] = anomaly['deviation']
 
             # 去除NaN值
             df = df.dropna().reset_index(drop=True)
@@ -268,10 +204,12 @@ class BacktestEngine:
             for i in range(len(df)):
                 current_date = df['date'].iloc[i]
                 current_date_dt = df['date_dt'].iloc[i]
-                current_signal = df['signal'].iloc[i]
+                current_anomaly_signal = df['anomaly_signal'].iloc[i]
                 current_price_a = df['close_a'].iloc[i]
                 current_price_b = df['close_b'].iloc[i]
                 current_ratio = df['ratio'].iloc[i]
+                current_fitting = df['fitting_line'].iloc[i] if 'fitting_line' in df.columns else current_ratio
+                current_delta = df['delta'].iloc[i] if 'delta' in df.columns else 0
 
                 # 更新现有持仓信息
                 positions_to_close = []
@@ -308,12 +246,12 @@ class BacktestEngine:
                     pos_entry_date = datetime.strptime(pos['entry_date'], '%Y-%m-%d')
                     pos['holding_days'] = (current_date_dt - pos_entry_date).days
 
+                    # 更新与拟合线的关系
+                    pos['current_delta'] = current_delta
+
                 # 检查平仓条件
                 for j, pos in enumerate(current_positions):
                     close_reason = None
-
-                    # 获取该仓位的出场阈值（如果在开仓时记录了自适应阈值）
-                    pos_exit_threshold = pos.get('exit_threshold', exit_threshold)
 
                     # 1. 止损检查
                     if pos['pnl_percent'] <= -stop_loss:
@@ -330,37 +268,22 @@ class BacktestEngine:
                             close_reason = 'trailing_stop'
 
                     # 4. 时间止损检查
-                    elif time_stop > 0 and pos['holding_days'] >= time_stop:
+                    elif 0 < time_stop <= pos['holding_days']:
                         close_reason = 'time_stop'
 
-                    # 5. 保本止损检查 - 优化点：根据持仓时间调整保本阈值
-                    elif breakeven_stop and pos['pnl_percent'] < 0:
-                        # 持仓时间越长，保本阈值越低
-                        breakeven_threshold = max(0.01, 0.03 - 0.002 * min(10, pos['holding_days']))
-                        if pos.get('highest_profit_percent', 0) >= breakeven_threshold:
-                            close_reason = 'breakeven_stop'
+                    # 5. 回归均值出场策略 - 当价格回归到拟合线附近
+                    elif mean_reversion_exit and abs(current_delta) <= mean_reversion_threshold * std_value:
+                        # 检查持仓方向是否与初始异常点信号一致
+                        if (pos['entry_signal'] > 0 > current_delta) or (
+                                pos['entry_signal'] < 0 < current_delta):
+                            close_reason = 'mean_reversion'
 
-                    # 6. 信号平仓检查 - 使用自适应阈值
-                    elif ((pos['asset'] == code_a and pos['direction'] == 'long' and
-                           current_signal >= -pos_exit_threshold) or
-                          (pos['asset'] == code_a and pos['direction'] == 'short' and
-                           current_signal <= pos_exit_threshold)):
-                        close_reason = 'signal'
-
-                    # 7. 风险加速平仓
-                    # 如果行情剧烈逆转，加速平仓
-                    elif (pos['asset'] == code_a and pos['direction'] == 'long' and
-                          current_signal > pos.get('entry_signal', 0) * 1.5) or \
-                            (pos['asset'] == code_a and pos['direction'] == 'short' and
-                             current_signal < pos.get('entry_signal', 0) * 1.5):
-                        close_reason = 'trend_reversal'
-
-                    # 8. 最大亏损保护
-                    # 如果当前亏损超过历史平均亏损的2倍，提前平仓避免巨额亏损
-                    elif losing_trades > 5 and total_loss > 0:
-                        avg_loss_pct = total_loss / losing_trades / initial_capital * 100
-                        if pos['pnl_percent'] < 0 and abs(pos['pnl_percent']) > 2 * avg_loss_pct:
-                            close_reason = 'max_loss_protection'
+                    # 6. 反向异常点出场 - 当出现反向的异常信号
+                    elif reverse_anomaly_exit and current_anomaly_signal != 0:
+                        # 检查当前异常信号是否与持仓方向相反
+                        if (pos['entry_signal'] > 0 > current_anomaly_signal) or (
+                                pos['entry_signal'] < 0 < current_anomaly_signal):
+                            close_reason = 'reverse_anomaly'
 
                     # 如果满足任何平仓条件，将该仓位添加到平仓列表
                     if close_reason:
@@ -396,175 +319,144 @@ class BacktestEngine:
                         'entry_price': pos['entry_price'],
                         'exit_price': pos['current_price'],
                         'position_type': f"{pos['direction']}_{pos['asset']}",
+                        'trade_direction': 'long_A_short_B' if pos['entry_signal_type'] == 'low_ratio' else 'short_A_long_B',
                         'position_size': pos['position_size'],
+                        'entry_signal_type': pos['entry_signal_type'],
+                        'entry_signal_strength': pos['entry_signal_strength'],
                         'pnl': pos['pnl'] - fee,
                         'pnl_percent': pos['pnl_percent'] - (fee / pos['position_size']),
                         'status': 'closed',
-                        'exit_reason': reason,
-                        'signal_value': pos.get('entry_signal', 0)
+                        'exit_reason': reason
                     })
                     trade_id += 1
 
                     # 移除平仓的头寸
                     current_positions.pop(j)
 
-                # 检查开仓信号
-                if len(current_positions) < max_positions:
-                    # 计算当前的适应性阈值
-                    current_entry_threshold = df['entry_threshold'].iloc[
-                        i] if 'entry_threshold' in df.columns else entry_threshold
-                    current_exit_threshold = df['exit_threshold'].iloc[
-                        i] if 'exit_threshold' in df.columns else exit_threshold
-
+                # 检查开仓信号 - 使用异常点作为入场信号
+                if len(current_positions) < max_positions and current_anomaly_signal != 0:
                     # 计算每个头寸的大小
                     if position_size_type == 'fixed':
                         position_amount = min(position_size, cash)
                     elif position_size_type == 'kelly':
-                        # 改进的Kelly公式实现，加入风险加权
+                        # 基本Kelly公式
                         win_rate = profitable_trades / max(1, profitable_trades + losing_trades)
                         avg_win = total_profit / max(1, profitable_trades)
                         avg_loss = total_loss / max(1, losing_trades)
 
-                        # 计算当前市场波动率水平，用于风险加权
-                        volatility_factor = 1.0
-                        if 'volatility' in df.columns:
-                            current_vol = df['volatility'].iloc[i]
-                            avg_vol = df['volatility'].iloc[max(0, i - 20):i + 1].mean() if i >= 20 else current_vol
-                            if avg_vol > 0:
-                                volatility_factor = min(1.5, max(0.5, avg_vol / current_vol))
-
                         if avg_loss > 0:
-                            # 标准Kelly公式
                             kelly_f = win_rate - ((1 - win_rate) / (avg_win / avg_loss))
-                            # 应用风险因子，高波动率时更保守
-                            kelly_f = kelly_f * volatility_factor
-                            # 保守限制，避免过度杠杆
-                            kelly_f = max(0, min(0.5, kelly_f))
+                            kelly_f = max(0, min(0.5, kelly_f))  # 限制在0-50%范围
                             position_amount = min(cash * kelly_f, cash)
                         else:
                             position_amount = min(cash * 0.1, cash)  # 默认使用10%
                     else:  # percent
-                        # 考虑市场波动性动态调整仓位
-                        dynamic_position = position_size
-                        if 'volatility' in df.columns and i > 20:
-                            vol_ratio = df['volatility'].iloc[i] / df['volatility'].iloc[max(0, i - 20):i + 1].mean()
-                            # 波动率高于平均时减少仓位，低于平均时增加仓位
-                            dynamic_position = position_size * (2 - min(1.5, max(0.5, vol_ratio)))
+                        position_amount = min(cash * (position_size / 100), cash)
 
-                        position_amount = min(cash * (dynamic_position / 100), cash)
+                    # 根据异常信号强度调整仓位
+                    signal_strength = df['z_score'].iloc[i] if 'z_score' in df.columns and i < len(df) else 2.0
+                    # 信号越强，仓位越大，但不超过原定仓位的1.5倍
+                    position_multiplier = min(1.5, 1.0 + (signal_strength - 2.0) / 3.0)
+                    position_amount = min(position_amount * position_multiplier, cash)
 
-                    # 如果有足够资金，检查开仓信号
+                    # 如果有足够资金，执行开仓
                     if 0 < position_amount <= cash:
-                        # 根据策略类型和信号值决定交易方向
-                        trade_signal = None
-
-                        # 信号高于阈值，做空资产A（或做多资产B，取决于对冲模式）
-                        if current_signal > current_entry_threshold:
+                        # 根据异常信号决定交易方向
+                        if current_anomaly_signal > 0:  # 比值高于拟合线，做空A做多B
                             trade_signal = 'short'
-                        # 信号低于负阈值，做多资产A（或做空资产B）
-                        elif current_signal < -current_entry_threshold:
+                            signal_type = 'high_ratio'
+                        else:  # 比值低于拟合线，做多A做空B
                             trade_signal = 'long'
+                            signal_type = 'low_ratio'
 
-                        # 风险过滤：检查是否满足风险收益比要求
-                        if trade_signal and risk_reward_ratio > 0:
-                            # 估计潜在收益
-                            potential_reward = abs(current_signal) / current_entry_threshold * take_profit
-                            # 计算风险（止损点）
-                            risk = stop_loss
-                            # 检查风险收益比是否满足要求
-                            if potential_reward / risk < risk_reward_ratio:
-                                trade_signal = None  # 风险收益比不满足，放弃交易
+                        # 扣除费用
+                        fee = position_amount * trading_fee
+                        actual_position = position_amount - fee
 
-                        # 额外的市场环境过滤
-                        if trade_signal and 'trend_strength' in df.columns:
-                            # 弱趋势环境下降低交易频率
-                            if df['trend_strength'].iloc[i] < 0.05 and np.random.random() > 0.5:
-                                trade_signal = None  # 50%概率放弃交易
-
-                        if trade_signal:
-                            # 扣除费用
-                            fee = position_amount * trading_fee
-                            actual_position = position_amount - fee
-
-                            # 确定交易资产和方向
-                            if hedge_mode == 'pair':
-                                # 在对模式下，同时开两个相反方向的仓位
-                                if trade_signal == 'short':
-                                    # 做空A，做多B
-                                    current_positions.append({
-                                        'asset': code_a,
-                                        'direction': 'short',
-                                        'entry_date': current_date,
-                                        'entry_price': current_price_a,
-                                        'current_price': current_price_a,
-                                        'position_size': actual_position / 2,  # 平分资金
-                                        'pnl': -fee / 2,
-                                        'pnl_percent': -fee / (actual_position / 2),
-                                        'entry_signal': current_signal,
-                                        'entry_threshold': current_entry_threshold,  # 记录开仓阈值
-                                        'exit_threshold': current_exit_threshold  # 记录平仓阈值
-                                    })
-
-                                    current_positions.append({
-                                        'asset': code_b,
-                                        'direction': 'long',
-                                        'entry_date': current_date,
-                                        'entry_price': current_price_b,
-                                        'current_price': current_price_b,
-                                        'position_size': actual_position / 2,  # 平分资金
-                                        'pnl': -fee / 2,
-                                        'pnl_percent': -fee / (actual_position / 2),
-                                        'entry_signal': current_signal,
-                                        'entry_threshold': current_entry_threshold,
-                                        'exit_threshold': current_exit_threshold
-                                    })
-                                else:
-                                    # 做多A，做空B
-                                    current_positions.append({
-                                        'asset': code_a,
-                                        'direction': 'long',
-                                        'entry_date': current_date,
-                                        'entry_price': current_price_a,
-                                        'current_price': current_price_a,
-                                        'position_size': actual_position / 2,  # 平分资金
-                                        'pnl': -fee / 2,
-                                        'pnl_percent': -fee / (actual_position / 2),
-                                        'entry_signal': current_signal,
-                                        'entry_threshold': current_entry_threshold,
-                                        'exit_threshold': current_exit_threshold
-                                    })
-
-                                    current_positions.append({
-                                        'asset': code_b,
-                                        'direction': 'short',
-                                        'entry_date': current_date,
-                                        'entry_price': current_price_b,
-                                        'current_price': current_price_b,
-                                        'position_size': actual_position / 2,  # 平分资金
-                                        'pnl': -fee / 2,
-                                        'pnl_percent': -fee / (actual_position / 2),
-                                        'entry_signal': current_signal,
-                                        'entry_threshold': current_entry_threshold,
-                                        'exit_threshold': current_exit_threshold
-                                    })
-                            else:
-                                # 单边模式，只交易资产A
+                        # 确定交易资产和方向
+                        if hedge_mode == 'pair':
+                            # 在对模式下，同时开两个相反方向的仓位
+                            if trade_signal == 'short':
+                                # 做空A，做多B
                                 current_positions.append({
                                     'asset': code_a,
-                                    'direction': trade_signal,
+                                    'direction': 'short',
                                     'entry_date': current_date,
                                     'entry_price': current_price_a,
                                     'current_price': current_price_a,
-                                    'position_size': actual_position,
-                                    'pnl': -fee,
-                                    'pnl_percent': -fee / actual_position,
-                                    'entry_signal': current_signal,
-                                    'entry_threshold': current_entry_threshold,
-                                    'exit_threshold': current_exit_threshold
+                                    'position_size': actual_position / 2,  # 平分资金
+                                    'pnl': -fee / 2,
+                                    'pnl_percent': -fee / (actual_position / 2),
+                                    'entry_signal': current_anomaly_signal,
+                                    'entry_signal_type': signal_type,
+                                    'entry_signal_strength': signal_strength,
+                                    'holding_days': 0
                                 })
 
-                            # 更新现金
-                            cash -= position_amount
+                                current_positions.append({
+                                    'asset': code_b,
+                                    'direction': 'long',
+                                    'entry_date': current_date,
+                                    'entry_price': current_price_b,
+                                    'current_price': current_price_b,
+                                    'position_size': actual_position / 2,  # 平分资金
+                                    'pnl': -fee / 2,
+                                    'pnl_percent': -fee / (actual_position / 2),
+                                    'entry_signal': current_anomaly_signal,
+                                    'entry_signal_type': signal_type,
+                                    'entry_signal_strength': signal_strength,
+                                    'holding_days': 0
+                                })
+                            else:
+                                # 做多A，做空B
+                                current_positions.append({
+                                    'asset': code_a,
+                                    'direction': 'long',
+                                    'entry_date': current_date,
+                                    'entry_price': current_price_a,
+                                    'current_price': current_price_a,
+                                    'position_size': actual_position / 2,  # 平分资金
+                                    'pnl': -fee / 2,
+                                    'pnl_percent': -fee / (actual_position / 2),
+                                    'entry_signal': current_anomaly_signal,
+                                    'entry_signal_type': signal_type,
+                                    'entry_signal_strength': signal_strength,
+                                    'holding_days': 0
+                                })
+
+                                current_positions.append({
+                                    'asset': code_b,
+                                    'direction': 'short',
+                                    'entry_date': current_date,
+                                    'entry_price': current_price_b,
+                                    'current_price': current_price_b,
+                                    'position_size': actual_position / 2,  # 平分资金
+                                    'pnl': -fee / 2,
+                                    'pnl_percent': -fee / (actual_position / 2),
+                                    'entry_signal': current_anomaly_signal,
+                                    'entry_signal_type': signal_type,
+                                    'entry_signal_strength': signal_strength,
+                                    'holding_days': 0
+                                })
+                        else:
+                            # 单边模式，只交易资产A
+                            current_positions.append({
+                                'asset': code_a,
+                                'direction': trade_signal,
+                                'entry_date': current_date,
+                                'entry_price': current_price_a,
+                                'current_price': current_price_a,
+                                'position_size': actual_position,
+                                'pnl': -fee,
+                                'pnl_percent': -fee / actual_position,
+                                'entry_signal': current_anomaly_signal,
+                                'entry_signal_type': signal_type,
+                                'entry_signal_strength': signal_strength,
+                                'holding_days': 0
+                            })
+
+                        # 更新现金
+                        cash -= position_amount
 
                 # 计算总权益
                 positions_value = sum(pos['position_size'] + pos['pnl'] for pos in current_positions)
@@ -604,8 +496,9 @@ class BacktestEngine:
                     'drawdown': -current_drawdown,  # 负值表示回撤
                     'cash': cash,
                     'positions_value': positions_value,
-                    'signal': current_signal,
-                    'ratio': current_ratio
+                    'anomaly_signal': current_anomaly_signal,
+                    'ratio': current_ratio,
+                    'delta': current_delta
                 })
 
             # 回测结束，平掉所有未平仓的头寸
@@ -633,12 +526,14 @@ class BacktestEngine:
                     'entry_price': pos['entry_price'],
                     'exit_price': pos['current_price'],
                     'position_type': f"{pos['direction']}_{pos['asset']}",
+                    'trade_direction': 'long_A_short_B' if pos.get('entry_signal_type') == 'low_ratio' else 'short_A_long_B',
                     'position_size': pos['position_size'],
+                    'entry_signal_type': pos.get('entry_signal_type', 'unknown'),
+                    'entry_signal_strength': pos.get('entry_signal_strength', 0),
                     'pnl': pos['pnl'] - fee,
                     'pnl_percent': pos['pnl_percent'] - (fee / pos['position_size']),
                     'status': 'closed',
-                    'exit_reason': 'end_of_backtest',
-                    'signal_value': pos.get('entry_signal', 0)
+                    'exit_reason': 'end_of_backtest'
                 })
                 trade_id += 1
 
@@ -667,7 +562,7 @@ class BacktestEngine:
             last_date = datetime.strptime(df['date'].iloc[-1], '%Y-%m-%d')
             years = (last_date - first_date).days / 365.25
             total_return = (final_equity - initial_capital) / initial_capital
-            annual_return = (1 + total_return) ** (1 / max(years, 0.01)) - 1
+            annual_return = (1 + total_return) ** (1 / max(years, 0.01)) - 1 if years > 0 else 0
 
             # 计算夏普比率
             if len(daily_returns) > 0:
@@ -707,7 +602,12 @@ class BacktestEngine:
 
             # 计算卡尔马比率（年化收益/最大回撤）
             calmar_ratio = annual_return / max_drawdown if max_drawdown > 0 else 0
-            # print(f"trades:{trades}")
+
+            # 异常点信号统计
+            anomaly_signals_count = sum(1 for i in range(len(df)) if df['anomaly_signal'].iloc[i] != 0)
+            long_signals_count = sum(1 for i in range(len(df)) if df['anomaly_signal'].iloc[i] < 0)
+            short_signals_count = sum(1 for i in range(len(df)) if df['anomaly_signal'].iloc[i] > 0)
+
             # 构建回测结果
             backtest_result = {
                 'equity_curve': equity_curve,
@@ -731,20 +631,28 @@ class BacktestEngine:
                 'profit_factor': profit_factor,
                 'avg_holding_period': avg_holding_period,
                 'strategy_parameters': {
-                    'strategy_type': strategy_type,
-                    'entry_threshold': entry_threshold,
-                    'exit_threshold': exit_threshold,
+                    'anomaly_threshold': anomaly_threshold,
+                    'polynomial_degree': polynomial_degree,
                     'stop_loss': stop_loss * 100,  # 转为百分比
                     'take_profit': take_profit * 100,  # 转为百分比
                     'trailing_stop': trailing_stop * 100,  # 转为百分比
                     'time_stop': time_stop,
                     'hedge_mode': hedge_mode,
                     'position_size_type': position_size_type,
-                    'position_size': position_size
+                    'position_size': position_size,
+                    'mean_reversion_exit': mean_reversion_exit,
+                    'mean_reversion_threshold': mean_reversion_threshold,
+                    'reverse_anomaly_exit': reverse_anomaly_exit
+                },
+                'anomaly_signal_stats': {
+                    'total_signals': anomaly_signals_count,
+                    'long_signals': long_signals_count,
+                    'short_signals': short_signals_count
                 }
             }
 
-            return backtest_result
+            # 转换NumPy类型为JSON可序列化的类型
+            return convert_numpy_types(backtest_result)
 
         except Exception as e:
             import traceback
@@ -988,8 +896,8 @@ class BacktestEngine:
                     market_results.sort(key=lambda x: x['score'], reverse=True)
                     best_by_market[market_type] = market_results[0]
 
-            # 构建返回结果
-            return {
+            # 将结果转换为JSON可序列化类型
+            return convert_numpy_types({
                 "entry_threshold": best_overall['entry_threshold'],
                 "exit_threshold": best_overall['exit_threshold'],
                 "score": best_overall['score'],
@@ -1001,7 +909,7 @@ class BacktestEngine:
                 "market_type": best_overall['market_type'],
                 "best_by_market": best_by_market,
                 "top_results": results[:5]  # 返回前5个最佳结果
-            }
+            })
 
         except Exception as e:
             import traceback
@@ -1290,7 +1198,7 @@ class BacktestEngine:
                 })
 
             # 返回回测结果
-            return {
+            return convert_numpy_types({
                 "trades": trades,
                 "initial_capital": initial_capital,
                 "final_equity": final_equity,
@@ -1303,7 +1211,7 @@ class BacktestEngine:
                 "current_analysis": current_analysis,
                 "similar_signals": similar_signals,
                 "portfolio_value_history": portfolio_value_history  # 添加资金曲线数据
-            }
+            })
 
         except Exception as e:
             return {"error": f"执行回测时发生错误: {str(e)}"}

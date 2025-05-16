@@ -33,8 +33,7 @@ def auto_update_trends(interval_minutes: int = 3):
                                           'stock_list.json')
                 with open(stock_file, 'r', encoding='utf-8') as f:
                     stock_data = json.load(f)
-                    # 获取前30只股票作为示例
-                    stock_codes = [stock['code'] for stock in stock_data.get('stocks', [])[:30]]
+                    stock_codes = [stock['code'] for stock in stock_data.get('stocks', [])[:60]]
             except Exception as e:
                 print(f"获取股票列表失败: {e}")
         # 更新每只股票的数据
@@ -165,8 +164,6 @@ def auto_update_kline_history(batch_size: int = 20, interval_hours: float = 0.5)
                 print(f"批次 {batch_idx + 1} 处理完成，休息10秒后继续...")
                 time.sleep(10)
 
-        # 清理5年以上的历史数据
-        print("清理5年以上的历史数据...")
         db.cleanup_old_data()
 
         print(f"[{datetime.now()}] 股票历史K线数据更新完成")
@@ -199,19 +196,19 @@ def start_auto_update_services():
     trends_thread.start()
     print("趋势数据自动更新服务已启动")
 
-    # # 启动历史K线数据更新线程（每30分钟更新一次）
-    # kline_thread = threading.Thread(
-    #     target=auto_update_kline_history,
-    #     args=(20, 0.5),
-    #     daemon=True,
-    #     name="KlineUpdateThread"
-    # )
-    # kline_thread.start()
-    # print("历史K线数据自动更新服务已启动，更新频率：每30分钟")
+    # 启动历史K线数据更新线程（每30分钟更新一次）
+    kline_thread = threading.Thread(
+        target=auto_update_kline_history,
+        args=(20, 0.5),
+        daemon=True,
+        name="KlineUpdateThread"
+    )
+    kline_thread.start()
+    print("历史K线数据自动更新服务已启动，更新频率：每30分钟")
 
     return {
         "trends_thread": trends_thread,
-        # "kline_thread": kline_thread
+        "kline_thread": kline_thread
     }
 
 

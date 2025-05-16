@@ -1,15 +1,17 @@
+import io
 import json
 import traceback
 from datetime import datetime, timedelta
-# import torch
 from typing import List, Dict
 
-from fastapi import FastAPI, HTTPException, Cookie, Response, Request, Form
+import numpy as np
+from PIL import Image, ImageDraw, ImageFont
+from fastapi import FastAPI, HTTPException, Response, Cookie
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from back_end.peudo_backend.get_stock_data.auto_update_trends import start_auto_update_services
+from back_end.peudo_backend.user_management import UserModel
 # 导入回测引擎
 from backtest.backtest_strategy import BacktestEngine
 from get_stock_data.get_stock_trends_data import StockTrendsData
@@ -24,23 +26,22 @@ from indicators.signal_evaluator import (
     get_signal_performance_stats,
     get_signal_history
 )
-from indicators.technical_indicators import calculate_indicators, calculate_price_ratio_anomaly, calculate_ratio_indicators
+from indicators.technical_indicators import calculate_indicators, calculate_price_ratio_anomaly, \
+    calculate_ratio_indicators, detect_ratio_indicators_signals
 from k_chart_fetcher import k_chart_fetcher, durations, get_stock_data_pair, date_alignment
 from kline_processor.processor import process_kline_by_type
+# 导入多资产分析模块
+from multi_asset_analysis import calculate_correlation_matrix, find_optimal_trading_pairs, get_asset_pair_analysis, \
+    get_stock_names, get_all_pair_charts
 # 导入LSTM预测器
 from prediction import get_predictor
 # 导入模块化后的函数
 from stock_search.searcher import score_match, is_stock_code_format, fetch_stock_from_api
-
 # 导入用户管理模块
-from user_management import UserModel, FavoriteModel, RecentPairModel
-from user_management import generate_captcha, verify_captcha
+from user_management import FavoriteModel, RecentPairModel
 from user_management import create_session, get_session, delete_session
+from user_management import generate_captcha, verify_captcha
 from user_management.dashboard_service import get_dashboard_data
-
-import io
-from PIL import Image, ImageDraw, ImageFont
-import numpy as np
 
 app = FastAPI()
 app.add_middleware(
@@ -144,9 +145,8 @@ async def get_k_chart_info(user_option_info: DataModel):
             user_option_info.degree,
             threshold_arg=user_option_info.threshold_arg
         )
-
         # 获取前端传入的阈值系数和原始标准差
-        threshold_multiplier = user_option_info.threshold_arg  # 用户设置的阈值倍数（如2.0）
+        threshold_multiplier = user_option_info.threshold_arg
         original_std = chart_data["threshold"]  # 原始标准差
 
         anomaly_info = calculate_price_ratio_anomaly(
@@ -374,7 +374,7 @@ async def get_stock_kline(data: StockKlineRequest):
 
         # 根据duration计算起始日期
         if data.duration == 'maximum':
-            start_date = '2015-01-01'  # 数据库中最早的数据
+            start_date = '1989-01-01'  # 数据库中最早的数据
         else:
             days = durations[data.duration]
             start_date = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
@@ -414,7 +414,6 @@ async def get_stock_kline(data: StockKlineRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# 以下为预测相关接口
 class PredictionRequestModel(BaseModel):
     code_a: str  # 股票A代码
     code_b: str  # 股票B代码
@@ -890,13 +889,13 @@ def generate_captcha_image(text: str, width: int = 120, height: int = 40) -> Ima
     # 创建白底图片
     image = Image.new('RGB', (width, height), color=(255, 255, 255))
     draw = ImageDraw.Draw(image)
-    
+
     # 尝试加载字体，如果失败则使用默认字体
     try:
         font = ImageFont.truetype("arial.ttf", 26)
     except IOError:
         font = ImageFont.load_default()
-    
+
     # 绘制验证码文本
     # 修复：PIL新版本使用getbbox或getsize替代textsize
     try:
@@ -910,29 +909,29 @@ def generate_captcha_image(text: str, width: int = 120, height: int = 40) -> Ima
         except AttributeError:
             # 最后尝试使用getsize
             text_width, text_height = font.getsize(text)
-    
+
     x = (width - text_width) // 2
     y = (height - text_height) // 2
-    
+
     # 确保x和y不为负值
     x = max(0, x)
     y = max(0, y)
-    
+
     # 绘制文本
     draw.text((x, y), text, font=font, fill=(0, 0, 0))
-    
+
     # 添加干扰线
     for i in range(5):
         start_point = (np.random.randint(0, width), np.random.randint(0, height))
         end_point = (np.random.randint(0, width), np.random.randint(0, height))
         draw.line([start_point, end_point], fill=(0, 0, 255), width=1)
-    
+
     # 添加干扰点
     for i in range(50):
         x = np.random.randint(0, width)
         y = np.random.randint(0, height)
         draw.point((x, y), fill=(0, 0, 0))
-    
+
     return image
 
 
@@ -1196,36 +1195,30 @@ class RatioIndicatorsRequest(BaseModel):
 @app.post("/get_ratio_indicators/")
 async def get_ratio_indicators(request: RatioIndicatorsRequest):
     """
-    获取两只股票价格比值的技术指标数据
-    
-    参数:
-        request: 包含股票代码和时间跨度的请求对象
-        
-    返回:
-        比值的移动平均线、MACD、RSI等技术指标数据
+    获取价格比值技术指标
     """
     try:
         # 获取两只股票的K线数据
         close_a, close_b, dates_a, dates_b = get_stock_data_pair(request.code_a, request.code_b)
-        
+
         # 日期对齐，确保使用相同交易日的数据
         close_a, close_b, dates = date_alignment(close_a, close_b, dates_a, dates_b)
-        
+
         # 根据时间跨度选择数据
         duration_days = durations[request.duration]
         if duration_days == -1 or duration_days >= len(close_a):
             duration_days = len(close_a)
-            
+
         close_a = close_a[-duration_days:]
         close_b = close_b[-duration_days:]
         dates = dates[-duration_days:]
-        
+
         # 计算价格比值
         ratio = [float(a) / float(b) for a, b in zip(close_a, close_b)]
-        
+
         # 计算比值的技术指标
         indicators = calculate_ratio_indicators(ratio)
-        
+
         # 构建响应
         response = {
             "code_a": request.code_a,
@@ -1234,8 +1227,254 @@ async def get_ratio_indicators(request: RatioIndicatorsRequest):
             "ratio": ratio,
             "indicators": indicators
         }
-        
+
         return response
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class RatioSignalsRequest(BaseModel):
+    code_a: str
+    code_b: str
+    duration: str
+
+
+@app.post("/get_ratio_indicator_signals/")
+async def get_ratio_indicator_signals(request: RatioSignalsRequest):
+    """
+    获取价格比值技术指标的特殊点（金叉、死叉、超买超卖等）
+    """
+    try:
+        # 获取两只股票的K线数据
+        close_a, close_b, dates_a, dates_b = get_stock_data_pair(request.code_a, request.code_b)
+
+        # 日期对齐，确保使用相同交易日的数据
+        close_a, close_b, dates = date_alignment(close_a, close_b, dates_a, dates_b)
+
+        # 根据时间跨度选择数据
+        duration_days = durations[request.duration]
+        if duration_days == -1 or duration_days >= len(close_a):
+            duration_days = len(close_a)
+
+        close_a = close_a[-duration_days:]
+        close_b = close_b[-duration_days:]
+        dates = dates[-duration_days:]
+
+        # 计算价格比值
+        ratio = [float(a) / float(b) for a, b in zip(close_a, close_b)]
+
+        # 计算比值的技术指标
+        indicators = calculate_ratio_indicators(ratio)
+
+        # 检测指标的特殊点
+        signals = detect_ratio_indicators_signals(indicators, dates)
+
+        return {
+            "code_a": request.code_a,
+            "code_b": request.code_b,
+            "dates": dates,
+            "ratio": ratio,
+            "signals": signals
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class MultiAssetAnalysisRequest(BaseModel):
+    assets: List[str]  # 资产代码列表，最多5个
+    duration: str
+    kline_type: str
+    polynomial_degree: int = 3
+    threshold_multiplier: float = 2.0
+
+
+@app.post("/multi_asset_analysis/")
+async def multi_asset_analysis(request: MultiAssetAnalysisRequest):
+    """
+    多资产联合分析 - 分析多个资产的价格关系和相对强弱
+    
+    参数:
+    - assets: 最多5个资产代码
+    - duration: 时间跨度 (maximum, 5y, 2y, 1y, 1q, 1m)
+    - kline_type: K线类型 (daily, weekly, monthly, yearly)
+    - polynomial_degree: 拟合曲线的多项式次数
+    - threshold_multiplier: 异常值检测的阈值乘数
+    
+    返回:
+    - 资产相对关系矩阵
+    - 资产强弱排名
+    - 交易建议
+    - 所有资产对的比值数据
+    """
+    try:
+        # 验证资产数量
+        if len(request.assets) < 2:
+            raise HTTPException(status_code=400, detail="至少需要2个资产进行比较分析")
+        if len(request.assets) > 6:
+            raise HTTPException(status_code=400, detail="最多只能分析5个资产")
+
+        # 获取资产名称
+        asset_names = get_stock_names(request.assets)
+
+        # 计算相关性矩阵
+        correlation_matrix = calculate_correlation_matrix(
+            assets=request.assets,
+            asset_names=asset_names,
+            duration=request.duration,
+            kline_type=request.kline_type,
+            polynomial_degree=request.polynomial_degree,
+            threshold_multiplier=request.threshold_multiplier
+        )
+
+        # 查找最优交易对
+        optimal_pairs = find_optimal_trading_pairs(correlation_matrix)
+
+        return {
+            "assets": request.assets,
+            "assetNames": asset_names,
+            "relationsMatrix": correlation_matrix["relationsMatrix"],
+            "assetStrengthRanking": correlation_matrix["assetStrengthRanking"],
+            "optimalPairs": optimal_pairs,
+            "pairDetail": None  # 初始时不包含特定资产对详情
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/asset_pair_analysis/")
+async def asset_pair_analysis(request: dict):
+    """
+    资产对比值分析 - 分析两个资产的价格比值关系
+    
+    参数:
+    - code_a: 资产A代码
+    - code_b: 资产B代码
+    - duration: 时间跨度
+    - kline_type: K线类型
+    - polynomial_degree: 拟合曲线的多项式次数
+    - threshold_multiplier: 异常值检测的阈值乘数
+    
+    返回:
+    - 比值数据
+    - 拟合曲线
+    - 异常点
+    - 交易建议
+    """
+    try:
+        # 验证请求参数
+        if not request.get("code_a") or not request.get("code_b"):
+            raise HTTPException(status_code=400, detail="必须提供两个资产代码")
+
+        # 获取资产对分析结果
+        pair_analysis = get_asset_pair_analysis(
+            code_a=request["code_a"],
+            code_b=request["code_b"],
+            duration=request.get("duration", "2y"),
+            polynomial_degree=request.get("polynomial_degree", 3),
+            threshold_multiplier=request.get("threshold_multiplier", 2.0),
+            kline_type=request.get("kline_type", "daily")
+        )
+
+        return pair_analysis
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/optimal_trading_pairs/")
+async def optimal_trading_pairs(request: dict):
+    """
+    最优交易对分析 - 从多资产中找出最有交易价值的资产对
+    
+    参数:
+    - assets: 资产代码列表
+    - duration: 时间跨度
+    - kline_type: K线类型
+    - threshold: 信号强度阈值
+    
+    返回:
+    - 最优交易对列表，按信号强度排序
+    - 每对交易的操作建议(做多/做空)
+    - 每对交易的信号强度
+    """
+    try:
+        # 验证请求参数
+        assets = request.get("assets", [])
+        if len(assets) < 2:
+            raise HTTPException(status_code=400, detail="至少需要2个资产进行比较")
+
+        # 获取资产名称
+        asset_names = get_stock_names(assets)
+
+        # 计算相关性矩阵
+        correlation_matrix = calculate_correlation_matrix(
+            assets=assets,
+            asset_names=asset_names,
+            duration=request.get("duration", "2y"),
+            kline_type=request.get("kline_type", "daily"),
+            polynomial_degree=request.get("polynomial_degree", 4),
+            threshold_multiplier=request.get("threshold_multiplier", 1.5)
+        )
+
+        # 查找最优交易对
+        threshold = request.get("threshold", 20)  # 默认信号强度阈值为20
+
+        # 过滤信号强度低于阈值的交易对
+        optimal_pairs = find_optimal_trading_pairs(correlation_matrix)
+        filtered_pairs = [pair for pair in optimal_pairs if abs(pair["signalStrength"]) >= threshold]
+
+        return {
+            "assets": assets,
+            "assetNames": asset_names,
+            "optimalPairs": filtered_pairs
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/get_all_pair_charts/")
+async def get_all_asset_pair_charts(request: dict):
+    """
+    获取所有资产对的比值图表数据
+    
+    参数:
+    - assets: 资产代码列表
+    - duration: 时间跨度
+    - polynomial_degree: 多项式拟合次数
+    - threshold_multiplier: 阈值倍数
+    - kline_type: K线类型 (daily, weekly, monthly, yearly)
+    
+    返回:
+    - 所有资产对的比值图表数据，包括价格比值、拟合线、绿色区域点和红色区域点
+    """
+    try:
+        # 验证请求参数
+        assets = request.get("assets", [])
+        if len(assets) < 2:
+            raise HTTPException(status_code=400, detail="至少需要2个资产进行比较")
+        
+        # 获取参数
+        duration = request.get("duration", "2y")
+        polynomial_degree = request.get("polynomial_degree", 3)
+        threshold_multiplier = request.get("threshold_multiplier", 2.0)
+        kline_type = request.get("kline_type", "daily")
+        
+        # 获取资产名称
+        asset_names = get_stock_names(assets)
+        
+        # 获取所有资产对比值图表数据
+        all_charts = get_all_pair_charts(
+            assets=assets,
+            duration=duration,
+            polynomial_degree=polynomial_degree,
+            threshold_multiplier=threshold_multiplier,
+            kline_type=kline_type
+        )
+        
+        return {
+            "assets": assets,
+            "assetNames": asset_names,
+            "pairCharts": all_charts
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

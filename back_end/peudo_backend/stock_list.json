@@ -159,6 +159,36 @@
       "code": "000985",
       "name": "中证全指",
       "type": "A股"
+    },
+    {
+      "code": "SPX",
+      "name": "标普500",
+      "type": "美股"
+    },
+    {
+      "code": "XAU",
+      "name": "黄金/美元",
+      "type": "黄金"
+    },
+    {
+      "code": "XAG",
+      "name": "白银/美元",
+      "type": "黄金"
+    },
+    {
+      "code": "HSI",
+      "name": "恒生指数",
+      "type": "港股"
+    },
+    {
+      "code": "GC00Y",
+      "name": "COMEX黄金",
+      "type": "黄金"
+    },
+    {
+      "code": "COMM",
+      "name": "CommScope Holding Co Inc",
+      "type": "美股"
     }
   ]
 }

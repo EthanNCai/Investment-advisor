@@ -210,7 +210,7 @@ def process_asset_data(code: str, name: str) -> Optional[Dict[str, Any]]:
             # 尝试获取最近一条记录
             records = db.query_kline(
                 stock_code=code,
-                start_date='2015-01-01',
+                start_date='1989-01-01',
                 end_date=(datetime.now().strftime('%Y-%m-%d'))
             )
 

@@ -79,16 +79,15 @@ class StockKlineDatabase:
             ) WITHOUT ROWID
         ''')
 
-    def insert_kline_data(self, data_list: list, code, name, type):
+    def insert_kline_data(self, data_list: list, code=None, name=None, type=None):
         """批量插入K线数据"""
         try:
             for data in data_list:
-                # 更新stock_list.json由fetch_stock_from_api处理
                 date_str = data['date']
                 year = int(date_str.split('-')[0])
                 table_name, base_year = self._get_partition_table(year)
-                # 只要2015年以后的数据
-                if base_year <= 2014:
+                # 只要1990年以后的数据
+                if base_year <= 1988:
                     continue
                 self._create_table_if_not_exists(table_name)
 
@@ -157,7 +156,7 @@ class StockKlineDatabase:
         # current_year = datetime.now().year
         # cutoff_year = current_year - 5
         # 设定保留数据的起始年份
-        retain_start_year = 2015
+        retain_start_year = 1989
 
         # 获取所有分表
         cursor = self.conn.cursor()
