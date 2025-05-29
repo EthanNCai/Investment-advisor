@@ -189,6 +189,11 @@
       "code": "COMM",
       "name": "CommScope Holding Co Inc",
       "type": "美股"
+    },
+    {
+      "code": "SI00Y",
+      "name": "COMEX白银",
+      "type": "黄金"
     }
   ]
 }

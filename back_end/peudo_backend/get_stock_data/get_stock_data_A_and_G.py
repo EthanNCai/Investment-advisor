@@ -203,7 +203,7 @@ class EastMoneyKLineSpider:
 if __name__ == "__main__":
     pass
     # 测试A股
-    sh_spider = EastMoneyKLineSpider("GC00Y")
+    sh_spider = EastMoneyKLineSpider("SI00Y")
     sh_data = sh_spider.get_klines()
     print(sh_data['name'])
     print(sh_data["klines"])

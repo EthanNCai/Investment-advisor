@@ -124,7 +124,7 @@ def calculate_correlation_matrix(assets: List[str], asset_names: List[str],
             # 使用差值百分位法计算信号强度
             signal_strength = 0
 
-            if current_delta > 0:  # 当前在绿色区域（比值高于拟合线）
+            if current_delta > 0:
                 if green_points:
                     # 计算绿色区域点差值范围
                     min_green = min(point["diff"] for point in green_points)

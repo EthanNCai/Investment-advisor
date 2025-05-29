@@ -11,6 +11,7 @@ from indicators.investment_signals import analyze_current_position, generate_inv
 from indicators.technical_indicators import calculate_price_ratio_anomaly
 from get_stock_data.stock_trends_base import StockTrendsDatabase
 
+
 # 在类定义外添加辅助函数
 def convert_numpy_types(obj):
     """将NumPy数据类型转换为标准Python类型，使其可JSON序列化"""
@@ -28,6 +29,7 @@ def convert_numpy_types(obj):
         return [convert_numpy_types(item) for item in obj]
     else:
         return obj
+
 
 class BacktestEngine:
     def __init__(self):
@@ -319,7 +321,8 @@ class BacktestEngine:
                         'entry_price': pos['entry_price'],
                         'exit_price': pos['current_price'],
                         'position_type': f"{pos['direction']}_{pos['asset']}",
-                        'trade_direction': 'long_A_short_B' if pos['entry_signal_type'] == 'low_ratio' else 'short_A_long_B',
+                        'trade_direction': 'long_A_short_B' if pos[
+                                                                   'entry_signal_type'] == 'low_ratio' else 'short_A_long_B',
                         'position_size': pos['position_size'],
                         'entry_signal_type': pos['entry_signal_type'],
                         'entry_signal_strength': pos['entry_signal_strength'],
@@ -526,7 +529,8 @@ class BacktestEngine:
                     'entry_price': pos['entry_price'],
                     'exit_price': pos['current_price'],
                     'position_type': f"{pos['direction']}_{pos['asset']}",
-                    'trade_direction': 'long_A_short_B' if pos.get('entry_signal_type') == 'low_ratio' else 'short_A_long_B',
+                    'trade_direction': 'long_A_short_B' if pos.get(
+                        'entry_signal_type') == 'low_ratio' else 'short_A_long_B',
                     'position_size': pos['position_size'],
                     'entry_signal_type': pos.get('entry_signal_type', 'unknown'),
                     'entry_signal_strength': pos.get('entry_signal_strength', 0),

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Spin, Typography, Space, Select, InputNumber, Button, Tabs, message, Alert, Form } from 'antd';
+import { Card, Spin, Typography, Space, Select, InputNumber, Button, Tabs, message, Alert, Form, Switch } from 'antd';
 import ReactECharts from 'echarts-for-react';
 import { useLocalStorage } from '../../LocalStorageContext';
 
@@ -11,15 +11,15 @@ const { TabPane } = Tabs;
 interface PredictionData {
   dates: string[];  // 预测日期
   values: number[]; // 预测值
-  upper_bound: number[]; // 上置信区间
-  lower_bound: number[]; // 下置信区间
+  upper_bound?: number[]; // 上置信区间 (可选)
+  lower_bound?: number[]; // 下置信区间 (可选)
   historical_dates: string[]; // 历史日期（用于显示连续图表）
   historical_values: number[]; // 历史值
-  performance: {
-    mse: number; // 均方误差
-    rmse: number; // 均方根误差
-    mae: number; // 平均绝对误差
-    r2: number; // R方值
+  performance?: {
+    mse?: number; // 均方误差
+    rmse?: number; // 均方根误差
+    mae?: number; // 平均绝对误差
+    r2?: number; // R方值
   };
   risk_level: 'low' | 'medium' | 'high'; // 风险级别评估
   forecast_trend: 'up' | 'down' | 'stable'; // 预测趋势
@@ -37,6 +37,7 @@ const PredictionAnalysis: React.FC<PredictionAnalysisProps> = ({ chartData, stoc
   const [confidenceLevel, setConfidenceLevel] = useLocalStorage<number>('confidence-level', 0.95);
   const [modelType, setModelType] = useLocalStorage<string>('model-type', 'enhanced_lstm');
   const [predictionData, setPredictionData] = useLocalStorage<PredictionData | null>('prediction-data', null);
+  const [usePretrainedModel, setUsePretrainedModel] = useLocalStorage<boolean>('use-pretrained-model', true);
   
   // 本地状态
   const [loading, setLoading] = useState<boolean>(false);
@@ -63,21 +64,40 @@ const PredictionAnalysis: React.FC<PredictionAnalysisProps> = ({ chartData, stoc
 
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:8000/predict_price_ratio/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          code_a: stockA,
-          code_b: stockB,
-          ratio_data: chartData.ratio,
-          dates: chartData.dates,
-          prediction_days: predictionDays,
-          confidence_level: confidenceLevel,
-          model_type: modelType,
-        }),
-      });
+      let response;
+      
+      if (usePretrainedModel) {
+        // 使用预训练模型API
+        response = await fetch('http://localhost:8000/predict_ratio_model/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            code_a: stockA,
+            code_b: stockB,
+            days_to_predict: predictionDays,
+            end_date: null, // 使用最新日期
+          }),
+        });
+      } else {
+        // 使用原有API
+        response = await fetch('http://localhost:8000/predict_price_ratio/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            code_a: stockA,
+            code_b: stockB,
+            ratio_data: chartData.ratio,
+            dates: chartData.dates,
+            prediction_days: predictionDays,
+            confidence_level: confidenceLevel,
+            model_type: modelType,
+          }),
+        });
+      }
       
       const data = await response.json();
       setPredictionData(data);
@@ -100,6 +120,73 @@ const PredictionAnalysis: React.FC<PredictionAnalysisProps> = ({ chartData, stoc
     // 设置历史数据点的大小和颜色
     const historySymbolSize = 4;
     const predictionSymbolSize = 5;
+    
+    const series = [
+      {
+        name: '历史数据',
+        type: 'line',
+        symbolSize: historySymbolSize,
+        symbol: 'circle',
+        data: [...predictionData.historical_values, ...new Array(predictionData.values.length).fill(null)],
+        itemStyle: {
+          color: '#1890ff'
+        }
+      },
+      {
+        name: '预测数据',
+        type: 'line',
+        symbolSize: predictionSymbolSize,
+        symbol: 'circle',
+        data: [...new Array(predictionData.historical_values.length).fill(null), ...predictionData.values],
+        itemStyle: {
+          color: '#52c41a'
+        },
+        lineStyle: {
+          width: 2,
+          type: 'dashed'
+        }
+      }
+    ];
+    
+    // 只有在有置信区间数据时添加相关系列
+    if (predictionData.upper_bound && predictionData.lower_bound) {
+      series.push(
+        {
+          name: '上置信区间',
+          type: 'line',
+          symbol: 'none',
+          data: [...new Array(predictionData.historical_values.length).fill(null), ...predictionData.upper_bound],
+          lineStyle: {
+            width: 1,
+            type: 'dotted',
+            opacity: 0.6,
+            color: '#faad14'
+          },
+          areaStyle: {
+            opacity: 0.2,
+            color: '#faad14'
+          }
+        },
+        {
+          name: '下置信区间',
+          type: 'line',
+          symbol: 'none',
+          data: [...new Array(predictionData.historical_values.length).fill(null), ...predictionData.lower_bound],
+          lineStyle: {
+            width: 1,
+            type: 'dotted',
+            opacity: 0.6,
+            color: '#faad14'
+          }
+        }
+      );
+    }
+    
+    // 动态设置图例
+    const legendData = ['历史数据', '预测数据'];
+    if (predictionData.upper_bound && predictionData.lower_bound) {
+      legendData.push('上置信区间', '下置信区间');
+    }
     
     return {
       title: {
@@ -126,7 +213,7 @@ const PredictionAnalysis: React.FC<PredictionAnalysisProps> = ({ chartData, stoc
         }
       },
       legend: {
-        data: ['历史数据', '预测数据', '上置信区间', '下置信区间'],
+        data: legendData,
         top: 30
       },
       grid: {
@@ -162,60 +249,7 @@ const PredictionAnalysis: React.FC<PredictionAnalysisProps> = ({ chartData, stoc
           end: 100
         }
       ],
-      series: [
-        {
-          name: '历史数据',
-          type: 'line',
-          symbolSize: historySymbolSize,
-          symbol: 'circle',
-          data: [...predictionData.historical_values, ...new Array(predictionData.values.length).fill(null)],
-          itemStyle: {
-            color: '#1890ff'
-          }
-        },
-        {
-          name: '预测数据',
-          type: 'line',
-          symbolSize: predictionSymbolSize,
-          symbol: 'circle',
-          data: [...new Array(predictionData.historical_values.length).fill(null), ...predictionData.values],
-          itemStyle: {
-            color: '#52c41a'
-          },
-          lineStyle: {
-            width: 2,
-            type: 'dashed'
-          }
-        },
-        {
-          name: '上置信区间',
-          type: 'line',
-          symbol: 'none',
-          data: [...new Array(predictionData.historical_values.length).fill(null), ...predictionData.upper_bound],
-          lineStyle: {
-            width: 1,
-            type: 'dotted',
-            opacity: 0.6,
-            color: '#faad14'
-          },
-          areaStyle: {
-            opacity: 0.2,
-            color: '#faad14'
-          }
-        },
-        {
-          name: '下置信区间',
-          type: 'line',
-          symbol: 'none',
-          data: [...new Array(predictionData.historical_values.length).fill(null), ...predictionData.lower_bound],
-          lineStyle: {
-            width: 1,
-            type: 'dotted',
-            opacity: 0.6,
-            color: '#faad14'
-          }
-        }
-      ]
+      series: series
     };
   };
 
@@ -275,7 +309,7 @@ const PredictionAnalysis: React.FC<PredictionAnalysisProps> = ({ chartData, stoc
 
   // 渲染模型性能指标
   const renderPerformanceMetrics = () => {
-    if (!predictionData) return null;
+    if (!predictionData || !predictionData.performance) return null;
     
     const { performance } = predictionData;
     
@@ -283,12 +317,12 @@ const PredictionAnalysis: React.FC<PredictionAnalysisProps> = ({ chartData, stoc
       <Card size="small" title="模型性能指标" style={{ marginTop: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
           <div>
-            <div><Text strong>均方误差 (MSE):</Text> {performance.mse.toFixed(4)}</div>
-            <div><Text strong>均方根误差 (RMSE):</Text> {performance.rmse.toFixed(4)}</div>
+            <div><Text strong>均方误差 (MSE):</Text> {performance.mse?.toFixed(4) || '未提供'}</div>
+            <div><Text strong>均方根误差 (RMSE):</Text> {performance.rmse?.toFixed(4) || '未提供'}</div>
           </div>
           <div>
-            <div><Text strong>平均绝对误差 (MAE):</Text> {performance.mae.toFixed(4)}</div>
-            <div><Text strong>决定系数 (R²):</Text> {performance.r2.toFixed(4)}</div>
+            <div><Text strong>平均绝对误差 (MAE):</Text> {performance.mae?.toFixed(4) || '未提供'}</div>
+            <div><Text strong>决定系数 (R²):</Text> {performance.r2?.toFixed(4) || '未提供'}</div>
           </div>
         </div>
       </Card>
@@ -319,6 +353,19 @@ const PredictionAnalysis: React.FC<PredictionAnalysisProps> = ({ chartData, stoc
           <TabPane tab="预测设置" key="1">
             <Space direction="vertical" style={{ width: '100%' }}>
               <Card size="small" title="预测参数">
+                {/* 模型选择开关 */}
+                <div style={{ marginBottom: 16 }}>
+                  <Form.Item label="使用预训练模型">
+                    <Switch 
+                      checked={usePretrainedModel}
+                      onChange={(checked) => setUsePretrainedModel(checked)}
+                    />
+                    <Text type="secondary" style={{ marginLeft: 8 }}>
+                      {usePretrainedModel ? '使用预训练LSTM模型' : '使用实时训练模型'}
+                    </Text>
+                  </Form.Item>
+                </div>
+              
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
                   <div style={{ width: '48%' }}>
                     <div style={{ marginBottom: 8 }}><Text>预测天数</Text></div>
@@ -330,29 +377,36 @@ const PredictionAnalysis: React.FC<PredictionAnalysisProps> = ({ chartData, stoc
                       style={{ width: '100%' }}
                     />
                   </div>
-                  <div style={{ width: '48%' }}>
-                    <div style={{ marginBottom: 8 }}><Text>置信水平</Text></div>
-                    <Select 
-                      value={confidenceLevel} 
-                      onChange={(value) => setConfidenceLevel(value)}
-                      style={{ width: '100%' }}
-                    >
-                      <Option value={0.9}>90%</Option>
-                      <Option value={0.95}>95%</Option>
-                      <Option value={0.99}>99%</Option>
-                    </Select>
+                  {!usePretrainedModel && (
+                    <div style={{ width: '48%' }}>
+                      <div style={{ marginBottom: 8 }}><Text>置信水平</Text></div>
+                      <Select 
+                        value={confidenceLevel} 
+                        onChange={(value) => setConfidenceLevel(value)}
+                        style={{ width: '100%' }}
+                        disabled={usePretrainedModel}
+                      >
+                        <Option value={0.9}>90%</Option>
+                        <Option value={0.95}>95%</Option>
+                        <Option value={0.99}>99%</Option>
+                      </Select>
+                    </div>
+                  )}
+                </div>
+                
+                {!usePretrainedModel && (
+                  <div style={{ marginBottom: 16 }}>
+                    <Form.Item label="预测模型">
+                      <Select
+                        value={modelType}
+                        onChange={setModelType}
+                        options={modelOptions}
+                        style={{ width: 170 }}
+                        disabled={usePretrainedModel}
+                      />
+                    </Form.Item>
                   </div>
-                </div>
-                <div style={{ marginBottom: 16 }}>
-                  <Form.Item label="预测模型">
-                    <Select
-                      value={modelType}
-                      onChange={setModelType}
-                      options={modelOptions}
-                      style={{ width: 170 }}
-                    />
-                  </Form.Item>
-                </div>
+                )}
               </Card>
               
               {predictionData && getRiskLevelDisplay()}

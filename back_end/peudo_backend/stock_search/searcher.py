@@ -182,4 +182,4 @@ def is_stock_code_format(keyword: str) -> bool:
         是否为股票代码格式
     """
     # 支持A股、港股、美股编码和黄金代码格式
-    return bool(re.match(r'^[0-9]{5,6}$|^[0-9]{4,5}$|^[A-Za-z\.]+$|^[Aa][Uu][0-9]{3,4}$|^[Aa][Uu][A-Za-z]+$|^[Nn][Yy][Aa][Uu]', keyword)) 
+    return bool(re.match(r'^[0-9]{5,6}$|^[0-9]{4,5}$|^[A-Za-z0-9\.]+$|^[Aa][Uu][0-9]{3,4}$|^[Aa][Uu][A-Za-z]+$|^[Nn][Yy][Aa][Uu]$', keyword))

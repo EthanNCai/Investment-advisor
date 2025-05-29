@@ -1,322 +1,157 @@
-2025-05-05 22:56:54,252 - __main__ - INFO - 初始化训练器，会话ID: 20250505_225654
-2025-05-05 22:56:54,252 - __main__ - INFO - 开始训练流程: 399001/399107, 模型类型: hybrid
-2025-05-05 22:56:54,262 - __main__ - INFO - 获取股票 399001 数据: 2509 条记录
-2025-05-05 22:56:54,271 - __main__ - INFO - 获取股票 399107 数据: 2509 条记录
-2025-05-05 22:56:54,279 - __main__ - INFO - 准备价格比值数据: 399001/399107, 原始记录数: A=2509, B=2509, 对齐后记录数: 2509
-2025-05-05 22:56:56,450 - __main__ - INFO - 前20个最重要特征:
-2025-05-05 22:56:56,451 - __main__ - INFO - ma5_ratio: 1.0000
-2025-05-05 22:56:56,451 - __main__ - INFO - ratio_ema12: 0.5890
-2025-05-05 22:56:56,451 - __main__ - INFO - ma10_ratio: 0.5770
-2025-05-05 22:56:56,451 - __main__ - INFO - ratio_bb_lower: 0.4807
-2025-05-05 22:56:56,451 - __main__ - INFO - ma20_ratio: 0.4778
-2025-05-05 22:56:56,451 - __main__ - INFO - ratio_bb_middle: 0.4776
-2025-05-05 22:56:56,452 - __main__ - INFO - ratio_ema26: 0.4770
-2025-05-05 22:56:56,452 - __main__ - INFO - ma30_ratio: 0.4443
-2025-05-05 22:56:56,452 - __main__ - INFO - ratio_bb_upper: 0.4432
-2025-05-05 22:56:56,452 - __main__ - INFO - A_ema26: 0.3490
-2025-05-05 22:56:56,452 - __main__ - INFO - A_ma30: 0.3460
-2025-05-05 22:56:56,452 - __main__ - INFO - B_ema26: 0.3446
-2025-05-05 22:56:56,452 - __main__ - INFO - A_ema12: 0.3372
-2025-05-05 22:56:56,452 - __main__ - INFO - B_ma30: 0.3367
-2025-05-05 22:56:56,452 - __main__ - INFO - A_ma20: 0.3345
-2025-05-05 22:56:56,452 - __main__ - INFO - A_bb_middle: 0.3345
-2025-05-05 22:56:56,452 - __main__ - INFO - A_bb_upper: 0.3340
-2025-05-05 22:56:56,452 - __main__ - INFO - B_bb_upper: 0.3321
-2025-05-05 22:56:56,452 - __main__ - INFO - B_ema12: 0.3320
-2025-05-05 22:56:56,452 - __main__ - INFO - A_bb_lower: 0.3306
-2025-05-05 22:56:56,452 - __main__ - INFO - 特征选择: 从 117 个特征中选择了 39 个特征
-2025-05-05 22:56:56,452 - __main__ - INFO - 特征工程完成，从 2509 条记录创建了 2480 条有效特征记录，特征数量: 39
-2025-05-05 22:56:56,464 - __main__ - INFO - 数据分割完成 - 训练集: 1712, 验证集: 367, 测试集: 367
-2025-05-05 22:56:56,521 - __main__ - INFO - 数据缩放完成，使用缩放器: robust
-2025-05-05 22:56:56,967 - __main__ - INFO - 构建了hybrid类型的LSTM模型，损失函数: r2
-2025-05-05 22:56:56,967 - __main__ - INFO - 模型输入形状: (30, 39)
-2025-05-05 22:56:56,967 - __main__ - INFO - 开始训练模型，最大轮数: 150, 批大小: 32
-2025-05-05 22:59:23,947 - __main__ - INFO - 训练完成，耗时: 146.98秒
-2025-05-05 22:59:24,457 - __main__ - INFO - 方向准确率: 50.82%, MAPE: 1.31%, 最大误差: 0.310362
-2025-05-05 22:59:24,457 - __main__ - INFO - 方向预测准确率: 50.82%
-2025-05-05 22:59:24,457 - __main__ - WARNING - 模型性能较差，考虑调整参数或使用不同的模型架构
-2025-05-05 22:59:24,937 - __main__ - INFO - 预测可视化图表已保存至: training_logs\results_20250505_225654\predictions.png
-2025-05-05 22:59:24,953 - __main__ - WARNING - 训练历史中不包含MAE指标，跳过MAE曲线绘制
-2025-05-05 22:59:24,959 - __main__ - WARNING - 训练历史中不包含MSE指标，跳过MSE曲线绘制
-2025-05-05 22:59:26,268 - __main__ - INFO - 训练历史图表已保存至: training_logs\results_20250505_225654\training_history.png
-2025-05-05 22:59:26,318 - __main__ - INFO - 模型已保存至: trained_models\399001_399107_hybrid_seq30_model\model.h5
-2025-05-05 22:59:26,319 - __main__ - INFO - 缩放器已保存至: trained_models\399001_399107_hybrid_seq30_model\scalers.pkl
-2025-05-05 22:59:26,321 - __main__ - INFO - 训练历史已保存至: trained_models\399001_399107_hybrid_seq30_model\training_history.json
-2025-05-05 22:59:26,327 - __main__ - INFO - 模型元数据已保存至: trained_models\399001_399107_hybrid_seq30_model\metadata.json
-2025-05-05 22:59:26,327 - __main__ - INFO - 训练流程完成，总耗时: 152.07秒
-2025-05-05 23:01:31,138 - __main__ - INFO - 初始化训练器，会话ID: 20250505_230131
-2025-05-05 23:01:31,138 - __main__ - INFO - 开始训练流程: 399001/399107, 模型类型: hybrid
-2025-05-05 23:01:31,147 - __main__ - INFO - 获取股票 399001 数据: 2509 条记录
-2025-05-05 23:01:31,154 - __main__ - INFO - 获取股票 399107 数据: 2509 条记录
-2025-05-05 23:01:31,163 - __main__ - INFO - 准备价格比值数据: 399001/399107, 原始记录数: A=2509, B=2509, 对齐后记录数: 2509
-2025-05-05 23:01:33,174 - __main__ - INFO - 前20个最重要特征:
-2025-05-05 23:01:33,174 - __main__ - INFO - ma5_ratio: 1.0000
-2025-05-05 23:01:33,175 - __main__ - INFO - ratio_ema12: 0.5890
-2025-05-05 23:01:33,175 - __main__ - INFO - ma10_ratio: 0.5770
-2025-05-05 23:01:33,175 - __main__ - INFO - ratio_bb_lower: 0.4807
-2025-05-05 23:01:33,175 - __main__ - INFO - ma20_ratio: 0.4778
-2025-05-05 23:01:33,175 - __main__ - INFO - ratio_bb_middle: 0.4776
-2025-05-05 23:01:33,175 - __main__ - INFO - ratio_ema26: 0.4770
-2025-05-05 23:01:33,175 - __main__ - INFO - ma30_ratio: 0.4443
-2025-05-05 23:01:33,175 - __main__ - INFO - ratio_bb_upper: 0.4432
-2025-05-05 23:01:33,175 - __main__ - INFO - A_ema26: 0.3490
-2025-05-05 23:01:33,176 - __main__ - INFO - A_ma30: 0.3460
-2025-05-05 23:01:33,176 - __main__ - INFO - B_ema26: 0.3446
-2025-05-05 23:01:33,176 - __main__ - INFO - A_ema12: 0.3372
-2025-05-05 23:01:33,176 - __main__ - INFO - B_ma30: 0.3367
-2025-05-05 23:01:33,176 - __main__ - INFO - A_ma20: 0.3345
-2025-05-05 23:01:33,176 - __main__ - INFO - A_bb_middle: 0.3345
-2025-05-05 23:01:33,176 - __main__ - INFO - A_bb_upper: 0.3340
-2025-05-05 23:01:33,176 - __main__ - INFO - B_bb_upper: 0.3321
-2025-05-05 23:01:33,176 - __main__ - INFO - B_ema12: 0.3320
-2025-05-05 23:01:33,176 - __main__ - INFO - A_bb_lower: 0.3306
-2025-05-05 23:01:33,176 - __main__ - INFO - 特征选择: 从 117 个特征中选择了 39 个特征
-2025-05-05 23:01:33,176 - __main__ - INFO - 特征工程完成，从 2509 条记录创建了 2480 条有效特征记录，特征数量: 39
-2025-05-05 23:01:33,186 - __main__ - INFO - 数据分割完成 - 训练集: 1712, 验证集: 367, 测试集: 367
-2025-05-05 23:01:33,247 - __main__ - INFO - 数据缩放完成，使用缩放器: robust
-2025-05-05 23:01:33,759 - __main__ - INFO - 构建了hybrid类型的LSTM模型，损失函数: huber
-2025-05-05 23:01:33,759 - __main__ - INFO - 模型输入形状: (30, 39)
-2025-05-05 23:01:33,760 - __main__ - INFO - 开始训练模型，最大轮数: 150, 批大小: 32
-2025-05-05 23:03:35,539 - __main__ - INFO - 训练完成，耗时: 121.78秒
-2025-05-05 23:03:35,931 - __main__ - INFO - 方向准确率: 50.00%, MAPE: 1.06%, 最大误差: 0.305329
-2025-05-05 23:03:35,931 - __main__ - INFO - 方向预测准确率: 50.00%
-2025-05-05 23:03:35,931 - __main__ - WARNING - 模型性能较差，考虑调整参数或使用不同的模型架构
-2025-05-05 23:03:36,322 - __main__ - INFO - 预测可视化图表已保存至: training_logs\results_20250505_230131\predictions.png
-2025-05-05 23:03:36,335 - __main__ - WARNING - 训练历史中不包含MAE指标，跳过MAE曲线绘制
-2025-05-05 23:03:36,339 - __main__ - WARNING - 训练历史中不包含MSE指标，跳过MSE曲线绘制
-2025-05-05 23:03:37,358 - __main__ - INFO - 训练历史图表已保存至: training_logs\results_20250505_230131\training_history.png
-2025-05-05 23:03:37,379 - __main__ - INFO - 模型已保存至: trained_models\399001_399107_hybrid_seq30_model\model.h5
-2025-05-05 23:03:37,380 - __main__ - INFO - 缩放器已保存至: trained_models\399001_399107_hybrid_seq30_model\scalers.pkl
-2025-05-05 23:03:37,381 - __main__ - INFO - 训练历史已保存至: trained_models\399001_399107_hybrid_seq30_model\training_history.json
-2025-05-05 23:03:37,385 - __main__ - INFO - 模型元数据已保存至: trained_models\399001_399107_hybrid_seq30_model\metadata.json
-2025-05-05 23:03:37,385 - __main__ - INFO - 训练流程完成，总耗时: 126.25秒
-2025-05-05 23:06:27,629 - __main__ - INFO - 初始化训练器，会话ID: 20250505_230627
-2025-05-05 23:06:27,629 - __main__ - INFO - 开始训练流程: 399001/399107, 模型类型: hybrid
-2025-05-05 23:06:27,636 - __main__ - INFO - 获取股票 399001 数据: 2509 条记录
-2025-05-05 23:06:27,642 - __main__ - INFO - 获取股票 399107 数据: 2509 条记录
-2025-05-05 23:06:27,648 - __main__ - INFO - 准备价格比值数据: 399001/399107, 原始记录数: A=2509, B=2509, 对齐后记录数: 2509
-2025-05-05 23:06:29,258 - __main__ - INFO - 前20个最重要特征:
-2025-05-05 23:06:29,258 - __main__ - INFO - ma5_ratio: 1.0000
-2025-05-05 23:06:29,259 - __main__ - INFO - ratio_ema12: 0.5890
-2025-05-05 23:06:29,259 - __main__ - INFO - ma10_ratio: 0.5770
-2025-05-05 23:06:29,259 - __main__ - INFO - ratio_bb_lower: 0.4807
-2025-05-05 23:06:29,259 - __main__ - INFO - ma20_ratio: 0.4778
-2025-05-05 23:06:29,259 - __main__ - INFO - ratio_bb_middle: 0.4776
-2025-05-05 23:06:29,259 - __main__ - INFO - ratio_ema26: 0.4770
-2025-05-05 23:06:29,259 - __main__ - INFO - ma30_ratio: 0.4443
-2025-05-05 23:06:29,259 - __main__ - INFO - ratio_bb_upper: 0.4432
-2025-05-05 23:06:29,259 - __main__ - INFO - A_ema26: 0.3490
-2025-05-05 23:06:29,259 - __main__ - INFO - A_ma30: 0.3460
-2025-05-05 23:06:29,259 - __main__ - INFO - B_ema26: 0.3446
-2025-05-05 23:06:29,259 - __main__ - INFO - A_ema12: 0.3372
-2025-05-05 23:06:29,259 - __main__ - INFO - B_ma30: 0.3367
-2025-05-05 23:06:29,259 - __main__ - INFO - A_ma20: 0.3345
-2025-05-05 23:06:29,259 - __main__ - INFO - A_bb_middle: 0.3345
-2025-05-05 23:06:29,259 - __main__ - INFO - A_bb_upper: 0.3340
-2025-05-05 23:06:29,259 - __main__ - INFO - B_bb_upper: 0.3321
-2025-05-05 23:06:29,259 - __main__ - INFO - B_ema12: 0.3320
-2025-05-05 23:06:29,261 - __main__ - INFO - A_bb_lower: 0.3306
-2025-05-05 23:06:29,261 - __main__ - INFO - 特征选择: 从 117 个特征中选择了 39 个特征
-2025-05-05 23:06:29,261 - __main__ - INFO - 特征工程完成，从 2509 条记录创建了 2480 条有效特征记录，特征数量: 39
-2025-05-05 23:06:29,269 - __main__ - INFO - 数据分割完成 - 训练集: 1712, 验证集: 367, 测试集: 367
-2025-05-05 23:06:29,312 - __main__ - INFO - 数据缩放完成，使用缩放器: robust
-2025-05-05 23:06:29,602 - __main__ - INFO - 构建了hybrid类型的LSTM模型，损失函数: huber
-2025-05-05 23:06:29,602 - __main__ - INFO - 模型输入形状: (30, 39)
-2025-05-05 23:06:29,602 - __main__ - INFO - 开始训练模型，最大轮数: 150, 批大小: 32
-2025-05-05 23:08:37,447 - __main__ - INFO - 训练完成，耗时: 127.84秒
-2025-05-05 23:08:37,876 - __main__ - INFO - 方向准确率: 50.11%, MAPE: 0.98%, 最大误差: 0.356393
-2025-05-05 23:08:37,877 - __main__ - INFO - 方向预测准确率: 50.11%
-2025-05-05 23:08:37,877 - __main__ - WARNING - 模型性能较差，考虑调整参数或使用不同的模型架构
-2025-05-05 23:08:38,307 - __main__ - INFO - 预测可视化图表已保存至: training_logs\results_20250505_230627\predictions.png
-2025-05-05 23:08:38,319 - __main__ - WARNING - 训练历史中不包含MAE指标，跳过MAE曲线绘制
-2025-05-05 23:08:38,325 - __main__ - WARNING - 训练历史中不包含MSE指标，跳过MSE曲线绘制
-2025-05-05 23:08:39,354 - __main__ - INFO - 训练历史图表已保存至: training_logs\results_20250505_230627\training_history.png
-2025-05-05 23:08:39,375 - __main__ - INFO - 模型已保存至: trained_models\399001_399107_hybrid_seq30_model\model.h5
-2025-05-05 23:08:39,377 - __main__ - INFO - 缩放器已保存至: trained_models\399001_399107_hybrid_seq30_model\scalers.pkl
-2025-05-05 23:08:39,379 - __main__ - INFO - 训练历史已保存至: trained_models\399001_399107_hybrid_seq30_model\training_history.json
-2025-05-05 23:08:39,382 - __main__ - INFO - 模型元数据已保存至: trained_models\399001_399107_hybrid_seq30_model\metadata.json
-2025-05-05 23:08:39,382 - __main__ - INFO - 训练流程完成，总耗时: 131.75秒
-2025-05-06 00:33:01,691 - __main__ - INFO - 初始化训练器，会话ID: 20250506_003301
-2025-05-06 00:33:01,692 - __main__ - INFO - 开始训练流程: 399001/399107, 模型类型: hybrid
-2025-05-06 00:33:01,725 - __main__ - INFO - 获取股票 399001 数据: 2509 条记录
-2025-05-06 00:33:01,735 - __main__ - INFO - 获取股票 399107 数据: 2509 条记录
-2025-05-06 00:33:01,762 - __main__ - INFO - 准备价格比值数据: 399001/399107, 原始记录数: A=2509, B=2509, 对齐后记录数: 2509
-2025-05-06 00:33:03,977 - __main__ - INFO - 前20个最重要特征:
-2025-05-06 00:33:03,978 - __main__ - INFO - ma5_ratio: 1.0000
-2025-05-06 00:33:03,978 - __main__ - INFO - ratio_ema12: 0.5890
-2025-05-06 00:33:03,978 - __main__ - INFO - ma10_ratio: 0.5770
-2025-05-06 00:33:03,978 - __main__ - INFO - ratio_bb_lower: 0.4807
-2025-05-06 00:33:03,978 - __main__ - INFO - ma20_ratio: 0.4778
-2025-05-06 00:33:03,978 - __main__ - INFO - ratio_bb_middle: 0.4776
-2025-05-06 00:33:03,978 - __main__ - INFO - ratio_ema26: 0.4770
-2025-05-06 00:33:03,979 - __main__ - INFO - ma30_ratio: 0.4443
-2025-05-06 00:33:03,979 - __main__ - INFO - ratio_bb_upper: 0.4432
-2025-05-06 00:33:03,979 - __main__ - INFO - A_ema26: 0.3490
-2025-05-06 00:33:03,979 - __main__ - INFO - A_ma30: 0.3460
-2025-05-06 00:33:03,979 - __main__ - INFO - B_ema26: 0.3446
-2025-05-06 00:33:03,979 - __main__ - INFO - A_ema12: 0.3372
-2025-05-06 00:33:03,979 - __main__ - INFO - B_ma30: 0.3367
-2025-05-06 00:33:03,980 - __main__ - INFO - A_ma20: 0.3345
-2025-05-06 00:33:03,980 - __main__ - INFO - A_bb_middle: 0.3345
-2025-05-06 00:33:03,980 - __main__ - INFO - A_bb_upper: 0.3340
-2025-05-06 00:33:03,980 - __main__ - INFO - B_bb_upper: 0.3321
-2025-05-06 00:33:03,980 - __main__ - INFO - B_ema12: 0.3320
-2025-05-06 00:33:03,980 - __main__ - INFO - A_bb_lower: 0.3306
-2025-05-06 00:33:03,980 - __main__ - INFO - 特征选择: 从 117 个特征中选择了 39 个特征
-2025-05-06 00:33:03,980 - __main__ - INFO - 特征工程完成，从 2509 条记录创建了 2480 条有效特征记录，特征数量: 39
-2025-05-06 00:33:03,998 - __main__ - INFO - 数据分割完成 - 训练集: 1712, 验证集: 367, 测试集: 367
-2025-05-06 00:33:04,095 - __main__ - INFO - 数据缩放完成，使用缩放器: robust
-2025-05-06 00:33:04,772 - __main__ - INFO - 构建了hybrid类型的LSTM模型，损失函数: huber
-2025-05-06 00:33:04,772 - __main__ - INFO - 模型输入形状: (30, 39)
-2025-05-06 00:33:04,773 - __main__ - INFO - 开始训练模型，最大轮数: 150, 批大小: 32
-2025-05-06 00:35:27,836 - __main__ - INFO - 训练完成，耗时: 143.06秒
-2025-05-06 00:35:28,371 - __main__ - INFO - 方向准确率: 50.33%, MAPE: 1.03%, 最大误差: 0.322865
-2025-05-06 00:35:28,371 - __main__ - INFO - 方向预测准确率: 50.33%
-2025-05-06 00:35:28,371 - __main__ - WARNING - 模型性能较差，考虑调整参数或使用不同的模型架构
-2025-05-06 00:35:28,892 - __main__ - INFO - 预测可视化图表已保存至: training_logs\results_20250506_003301\predictions.png
-2025-05-06 00:35:28,908 - __main__ - WARNING - 训练历史中不包含MAE指标，跳过MAE曲线绘制
-2025-05-06 00:35:28,913 - __main__ - WARNING - 训练历史中不包含MSE指标，跳过MSE曲线绘制
-2025-05-06 00:35:30,288 - __main__ - INFO - 训练历史图表已保存至: training_logs\results_20250506_003301\training_history.png
-2025-05-06 00:35:30,315 - __main__ - INFO - 模型已保存至: trained_models\399001_399107_hybrid_seq30_model\model.h5
-2025-05-06 00:35:30,317 - __main__ - INFO - 缩放器已保存至: trained_models\399001_399107_hybrid_seq30_model\scalers.pkl
-2025-05-06 00:35:30,319 - __main__ - INFO - 训练历史已保存至: trained_models\399001_399107_hybrid_seq30_model\training_history.json
-2025-05-06 00:35:30,324 - __main__ - INFO - 模型元数据已保存至: trained_models\399001_399107_hybrid_seq30_model\metadata.json
-2025-05-06 00:35:30,325 - __main__ - INFO - 训练流程完成，总耗时: 148.63秒
-2025-05-06 00:57:37,409 - __main__ - INFO - 初始化训练器，会话ID: 20250506_005737
-2025-05-06 00:57:37,409 - __main__ - INFO - 开始训练流程: 399001/399107, 模型类型: hybrid
-2025-05-06 00:57:37,418 - __main__ - INFO - 获取股票 399001 数据: 2509 条记录
-2025-05-06 00:57:37,427 - __main__ - INFO - 获取股票 399107 数据: 2509 条记录
-2025-05-06 00:57:37,434 - __main__ - INFO - 准备价格比值数据: 399001/399107, 原始记录数: A=2509, B=2509, 对齐后记录数: 2509
-2025-05-06 00:57:39,464 - __main__ - INFO - 前20个最重要特征:
-2025-05-06 00:57:39,464 - __main__ - INFO - ma5_ratio: 1.0000
-2025-05-06 00:57:39,465 - __main__ - INFO - ratio_ema12: 0.5890
-2025-05-06 00:57:39,465 - __main__ - INFO - ma10_ratio: 0.5770
-2025-05-06 00:57:39,465 - __main__ - INFO - ratio_bb_lower: 0.4807
-2025-05-06 00:57:39,465 - __main__ - INFO - ma20_ratio: 0.4778
-2025-05-06 00:57:39,465 - __main__ - INFO - ratio_bb_middle: 0.4776
-2025-05-06 00:57:39,465 - __main__ - INFO - ratio_ema26: 0.4770
-2025-05-06 00:57:39,465 - __main__ - INFO - ma30_ratio: 0.4443
-2025-05-06 00:57:39,465 - __main__ - INFO - ratio_bb_upper: 0.4432
-2025-05-06 00:57:39,465 - __main__ - INFO - A_ema26: 0.3490
-2025-05-06 00:57:39,466 - __main__ - INFO - A_ma30: 0.3460
-2025-05-06 00:57:39,466 - __main__ - INFO - B_ema26: 0.3446
-2025-05-06 00:57:39,466 - __main__ - INFO - A_ema12: 0.3372
-2025-05-06 00:57:39,466 - __main__ - INFO - B_ma30: 0.3367
-2025-05-06 00:57:39,466 - __main__ - INFO - A_ma20: 0.3345
-2025-05-06 00:57:39,466 - __main__ - INFO - A_bb_middle: 0.3345
-2025-05-06 00:57:39,466 - __main__ - INFO - A_bb_upper: 0.3340
-2025-05-06 00:57:39,466 - __main__ - INFO - B_bb_upper: 0.3321
-2025-05-06 00:57:39,466 - __main__ - INFO - B_ema12: 0.3320
-2025-05-06 00:57:39,466 - __main__ - INFO - A_bb_lower: 0.3306
-2025-05-06 00:57:39,466 - __main__ - INFO - 特征选择: 从 117 个特征中选择了 39 个特征
-2025-05-06 00:57:39,467 - __main__ - INFO - 特征工程完成，从 2509 条记录创建了 2480 条有效特征记录，特征数量: 39
-2025-05-06 00:57:39,476 - __main__ - INFO - 数据分割完成 - 训练集: 1712, 验证集: 367, 测试集: 367
-2025-05-06 00:57:39,535 - __main__ - INFO - 数据缩放完成，使用缩放器: robust
-2025-05-06 00:57:40,035 - __main__ - INFO - 构建了hybrid类型的LSTM模型，损失函数: huber
-2025-05-06 00:57:40,035 - __main__ - INFO - 模型输入形状: (30, 39)
-2025-05-06 00:57:40,035 - __main__ - INFO - 开始训练模型，最大轮数: 150, 批大小: 32
-2025-05-06 00:59:31,011 - __main__ - INFO - 训练完成，耗时: 110.98秒
-2025-05-06 00:59:31,401 - __main__ - INFO - 方向准确率: 49.07%, MAPE: 1.05%, 最大误差: 0.323725
-2025-05-06 00:59:31,401 - __main__ - INFO - 方向预测准确率: 49.07%
-2025-05-06 00:59:31,401 - __main__ - WARNING - 模型性能较差，考虑调整参数或使用不同的模型架构
-2025-05-06 00:59:31,779 - __main__ - INFO - 预测可视化图表已保存至: training_logs\results_20250506_005737\predictions.png
-2025-05-06 00:59:31,792 - __main__ - WARNING - 训练历史中不包含MAE指标，跳过MAE曲线绘制
-2025-05-06 00:59:31,797 - __main__ - WARNING - 训练历史中不包含MSE指标，跳过MSE曲线绘制
-2025-05-06 00:59:32,802 - __main__ - INFO - 训练历史图表已保存至: training_logs\results_20250506_005737\training_history.png
-2025-05-06 00:59:32,825 - __main__ - INFO - 模型已保存至: trained_models\399001_399107_hybrid_seq30_model\model.h5
-2025-05-06 00:59:32,826 - __main__ - INFO - 缩放器已保存至: trained_models\399001_399107_hybrid_seq30_model\scalers.pkl
-2025-05-06 00:59:32,828 - __main__ - INFO - 训练历史已保存至: trained_models\399001_399107_hybrid_seq30_model\training_history.json
-2025-05-06 00:59:32,832 - __main__ - INFO - 模型元数据已保存至: trained_models\399001_399107_hybrid_seq30_model\metadata.json
-2025-05-06 00:59:32,832 - __main__ - INFO - 训练流程完成，总耗时: 115.42秒
-2025-05-06 13:37:58,172 - __main__ - INFO - 初始化训练器，会话ID: 20250506_133758
-2025-05-06 13:37:58,172 - __main__ - INFO - 开始训练流程: 399001/399107, 模型类型: hybrid
-2025-05-06 13:37:58,208 - __main__ - INFO - 获取股票 399001 数据: 2509 条记录
-2025-05-06 13:37:58,217 - __main__ - INFO - 获取股票 399107 数据: 2509 条记录
-2025-05-06 13:37:58,242 - __main__ - INFO - 准备价格比值数据: 399001/399107, 原始记录数: A=2509, B=2509, 对齐后记录数: 2509
-2025-05-06 13:38:00,520 - __main__ - INFO - 前20个最重要特征:
-2025-05-06 13:38:00,521 - __main__ - INFO - ma5_ratio: 1.0000
-2025-05-06 13:38:00,522 - __main__ - INFO - ratio_ema12: 0.5890
-2025-05-06 13:38:00,522 - __main__ - INFO - ma10_ratio: 0.5770
-2025-05-06 13:38:00,522 - __main__ - INFO - ratio_bb_lower: 0.4807
-2025-05-06 13:38:00,522 - __main__ - INFO - ma20_ratio: 0.4778
-2025-05-06 13:38:00,522 - __main__ - INFO - ratio_bb_middle: 0.4776
-2025-05-06 13:38:00,522 - __main__ - INFO - ratio_ema26: 0.4770
-2025-05-06 13:38:00,522 - __main__ - INFO - ma30_ratio: 0.4443
-2025-05-06 13:38:00,522 - __main__ - INFO - ratio_bb_upper: 0.4432
-2025-05-06 13:38:00,522 - __main__ - INFO - A_ema26: 0.3490
-2025-05-06 13:38:00,522 - __main__ - INFO - A_ma30: 0.3460
-2025-05-06 13:38:00,523 - __main__ - INFO - B_ema26: 0.3446
-2025-05-06 13:38:00,523 - __main__ - INFO - A_ema12: 0.3372
-2025-05-06 13:38:00,523 - __main__ - INFO - B_ma30: 0.3367
-2025-05-06 13:38:00,523 - __main__ - INFO - A_ma20: 0.3345
-2025-05-06 13:38:00,523 - __main__ - INFO - A_bb_middle: 0.3345
-2025-05-06 13:38:00,523 - __main__ - INFO - A_bb_upper: 0.3340
-2025-05-06 13:38:00,523 - __main__ - INFO - B_bb_upper: 0.3321
-2025-05-06 13:38:00,523 - __main__ - INFO - B_ema12: 0.3320
-2025-05-06 13:38:00,523 - __main__ - INFO - A_bb_lower: 0.3306
-2025-05-06 13:38:00,523 - __main__ - INFO - 特征选择: 从 117 个特征中选择了 39 个特征
-2025-05-06 13:38:00,523 - __main__ - INFO - 特征工程完成，从 2509 条记录创建了 2480 条有效特征记录，特征数量: 39
-2025-05-06 13:38:00,540 - __main__ - INFO - 数据分割完成 - 训练集: 1712, 验证集: 367, 测试集: 367
-2025-05-06 13:38:00,618 - __main__ - INFO - 数据缩放完成，使用缩放器: robust
-2025-05-06 13:38:01,300 - __main__ - INFO - 构建了hybrid类型的LSTM模型，损失函数: huber
-2025-05-06 13:38:01,301 - __main__ - INFO - 模型输入形状: (30, 39)
-2025-05-06 13:38:01,301 - __main__ - INFO - 开始训练模型，最大轮数: 150, 批大小: 32
-2025-05-06 13:40:59,029 - __main__ - INFO - 训练完成，耗时: 177.73秒
-2025-05-06 13:40:59,848 - __main__ - INFO - 方向准确率: 51.36%, MAPE: 1.08%, 最大误差: 0.335900
-2025-05-06 13:40:59,848 - __main__ - INFO - 方向预测准确率: 51.36%
-2025-05-06 13:40:59,848 - __main__ - WARNING - 模型性能较差，考虑调整参数或使用不同的模型架构
-2025-05-06 13:41:00,726 - __main__ - INFO - 预测可视化图表已保存至: training_logs\results_20250506_133758\predictions.png
-2025-05-06 13:41:00,759 - __main__ - WARNING - 训练历史中不包含MAE指标，跳过MAE曲线绘制
-2025-05-06 13:41:00,767 - __main__ - WARNING - 训练历史中不包含MSE指标，跳过MSE曲线绘制
-2025-05-06 13:41:02,832 - __main__ - INFO - 训练历史图表已保存至: training_logs\results_20250506_133758\training_history.png
-2025-05-06 13:41:02,884 - __main__ - INFO - 模型已保存至: trained_models\399001_399107_hybrid_seq30_model\model.h5
-2025-05-06 13:41:02,884 - __main__ - INFO - 缩放器已保存至: trained_models\399001_399107_hybrid_seq30_model\scalers.pkl
-2025-05-06 13:41:02,892 - __main__ - INFO - 训练历史已保存至: trained_models\399001_399107_hybrid_seq30_model\training_history.json
-2025-05-06 13:41:02,898 - __main__ - INFO - 模型元数据已保存至: trained_models\399001_399107_hybrid_seq30_model\metadata.json
-2025-05-06 13:41:02,898 - __main__ - INFO - 训练流程完成，总耗时: 184.73秒
-2025-05-06 13:51:59,822 - __main__ - INFO - 初始化训练器，会话ID: 20250506_135159
-2025-05-06 13:51:59,822 - __main__ - INFO - 开始训练流程: 399001/399107, 模型类型: hybrid
-2025-05-06 13:51:59,841 - __main__ - INFO - 获取股票 399001 数据: 2509 条记录
-2025-05-06 13:51:59,856 - __main__ - INFO - 获取股票 399107 数据: 2509 条记录
-2025-05-06 13:51:59,869 - __main__ - INFO - 准备价格比值数据: 399001/399107, 原始记录数: A=2509, B=2509, 对齐后记录数: 2509
-2025-05-06 13:52:01,965 - __main__ - INFO - 前20个最重要特征:
-2025-05-06 13:52:01,965 - __main__ - INFO - ma5_ratio: 1.0000
-2025-05-06 13:52:01,966 - __main__ - INFO - ratio_ema12: 0.5890
-2025-05-06 13:52:01,966 - __main__ - INFO - ma10_ratio: 0.5770
-2025-05-06 13:52:01,966 - __main__ - INFO - ratio_bb_lower: 0.4807
-2025-05-06 13:52:01,966 - __main__ - INFO - ma20_ratio: 0.4778
-2025-05-06 13:52:01,966 - __main__ - INFO - ratio_bb_middle: 0.4776
-2025-05-06 13:52:01,966 - __main__ - INFO - ratio_ema26: 0.4770
-2025-05-06 13:52:01,966 - __main__ - INFO - ma30_ratio: 0.4443
-2025-05-06 13:52:01,966 - __main__ - INFO - ratio_bb_upper: 0.4432
-2025-05-06 13:52:01,966 - __main__ - INFO - A_ema26: 0.3490
-2025-05-06 13:52:01,966 - __main__ - INFO - A_ma30: 0.3460
-2025-05-06 13:52:01,966 - __main__ - INFO - B_ema26: 0.3446
-2025-05-06 13:52:01,967 - __main__ - INFO - A_ema12: 0.3372
-2025-05-06 13:52:01,967 - __main__ - INFO - B_ma30: 0.3367
-2025-05-06 13:52:01,967 - __main__ - INFO - A_ma20: 0.3345
-2025-05-06 13:52:01,967 - __main__ - INFO - A_bb_middle: 0.3345
-2025-05-06 13:52:01,967 - __main__ - INFO - A_bb_upper: 0.3340
-2025-05-06 13:52:01,967 - __main__ - INFO - B_bb_upper: 0.3321
-2025-05-06 13:52:01,967 - __main__ - INFO - B_ema12: 0.3320
-2025-05-06 13:52:01,967 - __main__ - INFO - A_bb_lower: 0.3306
-2025-05-06 13:52:01,967 - __main__ - INFO - 特征选择: 从 117 个特征中选择了 39 个特征
-2025-05-06 13:52:01,968 - __main__ - INFO - 特征工程完成，从 2509 条记录创建了 2480 条有效特征记录，特征数量: 39
-2025-05-06 13:52:01,979 - __main__ - INFO - 数据分割完成 - 训练集: 1712, 验证集: 367, 测试集: 367
-2025-05-06 13:52:02,046 - __main__ - INFO - 数据缩放完成，使用缩放器: robust
-2025-05-06 13:52:02,493 - __main__ - INFO - 构建了hybrid类型的LSTM模型，损失函数: huber
-2025-05-06 13:52:02,493 - __main__ - INFO - 模型输入形状: (30, 39)
-2025-05-06 13:52:02,494 - __main__ - INFO - 开始训练模型，最大轮数: 150, 批大小: 32
-2025-05-06 13:54:48,109 - __main__ - INFO - 训练完成，耗时: 165.61秒
-2025-05-06 13:54:48,686 - __main__ - INFO - 方向准确率: 50.71%, MAPE: 0.81%, 最大误差: 0.353326
-2025-05-06 13:54:48,686 - __main__ - INFO - 方向预测准确率: 50.71%
-2025-05-06 13:54:48,686 - __main__ - WARNING - 模型性能较差，考虑调整参数或使用不同的模型架构
-2025-05-06 13:54:49,154 - __main__ - INFO - 预测可视化图表已保存至: training_logs\results_20250506_135159\predictions.png
-2025-05-06 13:54:49,170 - __main__ - WARNING - 训练历史中不包含MAE指标，跳过MAE曲线绘制
-2025-05-06 13:54:49,178 - __main__ - WARNING - 训练历史中不包含MSE指标，跳过MSE曲线绘制
-2025-05-06 13:54:50,581 - __main__ - INFO - 训练历史图表已保存至: training_logs\results_20250506_135159\training_history.png
-2025-05-06 13:54:50,639 - __main__ - INFO - 模型已保存至: trained_models\399001_399107_hybrid_seq30_model\model.h5
-2025-05-06 13:54:50,639 - __main__ - INFO - 缩放器已保存至: trained_models\399001_399107_hybrid_seq30_model\scalers.pkl
-2025-05-06 13:54:50,644 - __main__ - INFO - 训练历史已保存至: trained_models\399001_399107_hybrid_seq30_model\training_history.json
-2025-05-06 13:54:50,652 - __main__ - INFO - 模型元数据已保存至: trained_models\399001_399107_hybrid_seq30_model\metadata.json
-2025-05-06 13:54:50,652 - __main__ - INFO - 训练流程完成，总耗时: 170.83秒
+2025-05-17 12:08:33,097 - __main__ - INFO - 初始化训练器，会话ID: 20250517_120833
+2025-05-17 12:08:33,098 - __main__ - INFO - 开始训练流程: XAU/XAG, 模型类型: hybrid
+2025-05-17 12:08:33,113 - __main__ - INFO - 获取股票 XAU 数据: 2668 条记录
+2025-05-17 12:08:33,124 - __main__ - INFO - 获取股票 XAG 数据: 2664 条记录
+2025-05-17 12:08:33,145 - __main__ - INFO - 准备价格比值数据: XAU/XAG, 原始记录数: A=2668, B=2664, 对齐后记录数: 2664
+2025-05-17 12:08:33,388 - __main__ - WARNING - 移除4个近似常数特征: ['A_amount', 'A_turnover', 'B_amount', 'B_turnover']
+2025-05-17 12:08:33,391 - __main__ - WARNING - F回归特征选择失败: Input contains NaN, infinity or a value too large for dtype('float64').
+2025-05-17 12:08:33,392 - __main__ - WARNING - 互信息特征选择失败: Input contains NaN, infinity or a value too large for dtype('float64').
+2025-05-17 12:08:33,394 - __main__ - WARNING - 随机森林特征选择失败: Input contains NaN, infinity or a value too large for dtype('float32').
+2025-05-17 12:08:33,395 - __main__ - WARNING - Lasso特征选择失败: Input contains NaN, infinity or a value too large for dtype('float64').
+2025-05-17 12:08:33,395 - __main__ - INFO - 前20个最重要特征:
+2025-05-17 12:08:33,397 - __main__ - INFO - A_open: 1.0000
+2025-05-17 12:08:33,397 - __main__ - INFO - B_ma20: 1.0000
+2025-05-17 12:08:33,397 - __main__ - INFO - ratio_rsi: 1.0000
+2025-05-17 12:08:33,397 - __main__ - INFO - ratio_to_ma30: 1.0000
+2025-05-17 12:08:33,398 - __main__ - INFO - ma30_ratio: 1.0000
+2025-05-17 12:08:33,398 - __main__ - INFO - ratio_to_ma20: 1.0000
+2025-05-17 12:08:33,398 - __main__ - INFO - ma20_ratio: 1.0000
+2025-05-17 12:08:33,398 - __main__ - INFO - ratio_to_ma10: 1.0000
+2025-05-17 12:08:33,398 - __main__ - INFO - ma10_ratio: 1.0000
+2025-05-17 12:08:33,398 - __main__ - INFO - ratio_to_ma5: 1.0000
+2025-05-17 12:08:33,398 - __main__ - INFO - ma5_ratio: 1.0000
+2025-05-17 12:08:33,398 - __main__ - INFO - B_close_to_low: 1.0000
+2025-05-17 12:08:33,398 - __main__ - INFO - B_close_to_high: 1.0000
+2025-05-17 12:08:33,398 - __main__ - INFO - B_bb_width: 1.0000
+2025-05-17 12:08:33,398 - __main__ - INFO - B_bb_lower: 1.0000
+2025-05-17 12:08:33,398 - __main__ - INFO - B_bb_upper: 1.0000
+2025-05-17 12:08:33,398 - __main__ - INFO - B_bb_std: 1.0000
+2025-05-17 12:08:33,398 - __main__ - INFO - B_bb_middle: 1.0000
+2025-05-17 12:08:33,398 - __main__ - INFO - B_volume_ratio: 1.0000
+2025-05-17 12:08:33,398 - __main__ - INFO - B_volume_ma10: 1.0000
+2025-05-17 12:08:33,398 - __main__ - INFO - 特征选择: 从 113 个特征中选择了 38 个特征
+2025-05-17 12:08:33,398 - __main__ - INFO - 特征工程完成，从 2664 条记录创建了 1378 条有效特征记录，特征数量: 38
+2025-05-17 12:08:33,404 - __main__ - INFO - 数据分割完成 - 训练集: 940, 验证集: 202, 测试集: 202
+2025-05-17 12:08:33,407 - __main__ - ERROR - 训练流程出错: Input contains infinity or a value too large for dtype('float64').
+2025-05-17 12:08:33,410 - __main__ - ERROR - Traceback (most recent call last):
+  File "D:\software\Investment-advisor\back_end\peudo_backend\prediction\model_trainer.py", line 1563, in run_complete_training_pipeline
+    X_train, X_val, X_test, y_train, y_val, y_test
+  File "D:\software\Investment-advisor\back_end\peudo_backend\prediction\model_trainer.py", line 682, in scale_data
+    X_train_scaled = feature_scaler.fit_transform(X_train_reshaped)
+  File "D:\software\Python\explain\lib\site-packages\sklearn\base.py", line 852, in fit_transform
+    return self.fit(X, **fit_params).transform(X)
+  File "D:\software\Python\explain\lib\site-packages\sklearn\preprocessing\_data.py", line 1493, in fit
+    force_all_finite="allow-nan",
+  File "D:\software\Python\explain\lib\site-packages\sklearn\base.py", line 566, in _validate_data
+    X = check_array(X, **check_params)
+  File "D:\software\Python\explain\lib\site-packages\sklearn\utils\validation.py", line 800, in check_array
+    _assert_all_finite(array, allow_nan=force_all_finite == "allow-nan")
+  File "D:\software\Python\explain\lib\site-packages\sklearn\utils\validation.py", line 116, in _assert_all_finite
+    type_err, msg_dtype if msg_dtype is not None else X.dtype
+ValueError: Input contains infinity or a value too large for dtype('float64').
+
+2025-05-17 12:17:36,297 - __main__ - INFO - 初始化训练器，会话ID: 20250517_121736
+2025-05-17 12:17:36,297 - __main__ - INFO - 开始训练流程: XAU/XAG, 模型类型: hybrid
+2025-05-17 12:17:36,305 - __main__ - INFO - 获取股票 XAU 数据: 2668 条记录
+2025-05-17 12:17:36,311 - __main__ - INFO - 获取股票 XAG 数据: 2664 条记录
+2025-05-17 12:17:36,318 - __main__ - INFO - 准备价格比值数据: XAU/XAG, 原始记录数: A=2668, B=2664, 对齐后记录数: 2664
+2025-05-17 12:17:36,493 - __main__ - WARNING - 移除4个近似常数特征: ['A_amount', 'A_turnover', 'B_amount', 'B_turnover']
+2025-05-17 12:17:36,495 - __main__ - WARNING - F回归特征选择失败: Input contains NaN, infinity or a value too large for dtype('float64').
+2025-05-17 12:17:36,496 - __main__ - WARNING - 互信息特征选择失败: Input contains NaN, infinity or a value too large for dtype('float64').
+2025-05-17 12:17:36,497 - __main__ - WARNING - 随机森林特征选择失败: Input contains NaN, infinity or a value too large for dtype('float32').
+2025-05-17 12:17:36,498 - __main__ - WARNING - Lasso特征选择失败: Input contains NaN, infinity or a value too large for dtype('float64').
+2025-05-17 12:17:36,499 - __main__ - INFO - 前20个最重要特征:
+2025-05-17 12:17:36,499 - __main__ - INFO - A_open: 1.0000
+2025-05-17 12:17:36,499 - __main__ - INFO - B_ma20: 1.0000
+2025-05-17 12:17:36,500 - __main__ - INFO - ratio_rsi: 1.0000
+2025-05-17 12:17:36,500 - __main__ - INFO - ratio_to_ma30: 1.0000
+2025-05-17 12:17:36,500 - __main__ - INFO - ma30_ratio: 1.0000
+2025-05-17 12:17:36,500 - __main__ - INFO - ratio_to_ma20: 1.0000
+2025-05-17 12:17:36,500 - __main__ - INFO - ma20_ratio: 1.0000
+2025-05-17 12:17:36,500 - __main__ - INFO - ratio_to_ma10: 1.0000
+2025-05-17 12:17:36,500 - __main__ - INFO - ma10_ratio: 1.0000
+2025-05-17 12:17:36,500 - __main__ - INFO - ratio_to_ma5: 1.0000
+2025-05-17 12:17:36,500 - __main__ - INFO - ma5_ratio: 1.0000
+2025-05-17 12:17:36,500 - __main__ - INFO - B_close_to_low: 1.0000
+2025-05-17 12:17:36,500 - __main__ - INFO - B_close_to_high: 1.0000
+2025-05-17 12:17:36,500 - __main__ - INFO - B_bb_width: 1.0000
+2025-05-17 12:17:36,500 - __main__ - INFO - B_bb_lower: 1.0000
+2025-05-17 12:17:36,500 - __main__ - INFO - B_bb_upper: 1.0000
+2025-05-17 12:17:36,500 - __main__ - INFO - B_bb_std: 1.0000
+2025-05-17 12:17:36,500 - __main__ - INFO - B_bb_middle: 1.0000
+2025-05-17 12:17:36,500 - __main__ - INFO - B_volume_ratio: 1.0000
+2025-05-17 12:17:36,500 - __main__ - INFO - B_volume_ma10: 1.0000
+2025-05-17 12:17:36,500 - __main__ - INFO - 特征选择: 从 113 个特征中选择了 38 个特征
+2025-05-17 12:17:36,501 - __main__ - INFO - 特征工程完成，从 2664 条记录创建了 1378 条有效特征记录，特征数量: 38
+2025-05-17 12:17:36,507 - __main__ - INFO - 数据分割完成 - 训练集: 940, 验证集: 202, 测试集: 202
+2025-05-17 12:17:36,510 - __main__ - ERROR - 训练流程出错: Input contains infinity or a value too large for dtype('float64').
+2025-05-17 12:17:36,512 - __main__ - ERROR - Traceback (most recent call last):
+  File "D:\software\Investment-advisor\back_end\peudo_backend\prediction\model_trainer.py", line 1563, in run_complete_training_pipeline
+    X_train, X_val, X_test, y_train, y_val, y_test
+  File "D:\software\Investment-advisor\back_end\peudo_backend\prediction\model_trainer.py", line 682, in scale_data
+    X_train_scaled = feature_scaler.fit_transform(X_train_reshaped)
+  File "D:\software\Python\explain\lib\site-packages\sklearn\base.py", line 852, in fit_transform
+    return self.fit(X, **fit_params).transform(X)
+  File "D:\software\Python\explain\lib\site-packages\sklearn\preprocessing\_data.py", line 1493, in fit
+    force_all_finite="allow-nan",
+  File "D:\software\Python\explain\lib\site-packages\sklearn\base.py", line 566, in _validate_data
+    X = check_array(X, **check_params)
+  File "D:\software\Python\explain\lib\site-packages\sklearn\utils\validation.py", line 800, in check_array
+    _assert_all_finite(array, allow_nan=force_all_finite == "allow-nan")
+  File "D:\software\Python\explain\lib\site-packages\sklearn\utils\validation.py", line 116, in _assert_all_finite
+    type_err, msg_dtype if msg_dtype is not None else X.dtype
+ValueError: Input contains infinity or a value too large for dtype('float64').
+
+2025-05-17 12:23:34,849 - __main__ - INFO - 初始化训练器，会话ID: 20250517_122334
+2025-05-17 12:23:34,850 - __main__ - INFO - 开始训练流程: XAU/XAG, 模型类型: hybrid
+2025-05-17 12:23:34,859 - __main__ - INFO - 获取股票 XAU 数据: 2668 条记录
+2025-05-17 12:23:34,866 - __main__ - INFO - 获取股票 XAG 数据: 2664 条记录
+2025-05-17 12:23:34,874 - __main__ - INFO - 准备价格比值数据: XAU/XAG, 原始记录数: A=2668, B=2664, 对齐后记录数: 2664
+2025-05-17 12:23:34,998 - __main__ - WARNING - 以下4列为常量值，考虑删除：['A_amount', 'A_turnover', 'B_amount', 'B_turnover']
+2025-05-17 12:23:34,999 - __main__ - INFO - 特征工程完成，从 2664 条记录创建了 2664 条有效特征记录，特征数量: 113
+2025-05-17 12:23:35,025 - __main__ - INFO - 数据分割完成 - 训练集: 1840, 验证集: 395, 测试集: 395
+2025-05-17 12:23:35,025 - __main__ - INFO - 开始数据缩放前的安全检查，检测无穷值和极端值...
+2025-05-17 12:23:35,460 - __main__ - INFO - 数据缩放完成，使用缩放器: robust
+2025-05-17 12:23:35,954 - __main__ - INFO - 构建了hybrid类型的LSTM模型，损失函数: huber
+2025-05-17 12:23:35,955 - __main__ - INFO - 模型输入形状: (30, 113)
+2025-05-17 12:23:35,955 - __main__ - INFO - 开始训练模型，最大轮数: 150, 批大小: 32
+2025-05-17 12:25:46,576 - __main__ - INFO - 训练完成，耗时: 130.62秒
+2025-05-17 12:25:46,999 - __main__ - INFO - 方向准确率: 51.77%, MAPE: 4.57%, 最大误差: 20.163590
+2025-05-17 12:25:46,999 - __main__ - INFO - 方向预测准确率: 51.77%
+2025-05-17 12:25:46,999 - __main__ - WARNING - 模型性能较差，考虑调整参数或使用不同的模型架构
+2025-05-17 12:25:47,421 - __main__ - INFO - 预测可视化图表已保存至: training_logs\results_20250517_122334\predictions.png
+2025-05-17 12:25:47,436 - __main__ - WARNING - 训练历史中不包含MAE指标，跳过MAE曲线绘制
+2025-05-17 12:25:47,440 - __main__ - WARNING - 训练历史中不包含MSE指标，跳过MSE曲线绘制
+2025-05-17 12:25:48,448 - __main__ - INFO - 训练历史图表已保存至: training_logs\results_20250517_122334\training_history.png
+2025-05-17 12:25:48,469 - __main__ - INFO - 模型已保存至: trained_models\XAU_XAG_hybrid_seq30_model\model.h5
+2025-05-17 12:25:48,470 - __main__ - INFO - 缩放器已保存至: trained_models\XAU_XAG_hybrid_seq30_model\scalers.pkl
+2025-05-17 12:25:48,473 - __main__ - INFO - 训练历史已保存至: trained_models\XAU_XAG_hybrid_seq30_model\training_history.json
+2025-05-17 12:25:48,477 - __main__ - INFO - 模型元数据已保存至: trained_models\XAU_XAG_hybrid_seq30_model\metadata.json
+2025-05-17 12:25:48,477 - __main__ - INFO - 训练流程完成，总耗时: 133.63秒
+2025-05-17 12:27:31,678 - __main__ - INFO - 初始化训练器，会话ID: 20250517_122731
+2025-05-17 12:27:31,678 - __main__ - INFO - 开始训练流程: XAU/XAG, 模型类型: hybrid
+2025-05-17 12:27:31,686 - __main__ - INFO - 获取股票 XAU 数据: 2668 条记录
+2025-05-17 12:27:31,693 - __main__ - INFO - 获取股票 XAG 数据: 2664 条记录
+2025-05-17 12:27:31,699 - __main__ - INFO - 准备价格比值数据: XAU/XAG, 原始记录数: A=2668, B=2664, 对齐后记录数: 2664
+2025-05-17 12:27:31,815 - __main__ - WARNING - 以下4列为常量值，考虑删除：['A_amount', 'A_turnover', 'B_amount', 'B_turnover']
+2025-05-17 12:27:31,816 - __main__ - INFO - 特征工程完成，从 2664 条记录创建了 2664 条有效特征记录，特征数量: 113
+2025-05-17 12:27:31,831 - __main__ - INFO - 数据分割完成 - 训练集: 1840, 验证集: 395, 测试集: 395
+2025-05-17 12:27:31,832 - __main__ - INFO - 开始数据缩放前的安全检查，检测无穷值和极端值...
+2025-05-17 12:27:32,265 - __main__ - INFO - 数据缩放完成，使用缩放器: robust
+2025-05-17 12:27:32,650 - __main__ - INFO - 构建了hybrid类型的LSTM模型，损失函数: huber
+2025-05-17 12:27:32,650 - __main__ - INFO - 模型输入形状: (30, 113)
+2025-05-17 12:27:32,650 - __main__ - INFO - 开始训练模型，最大轮数: 150, 批大小: 32
+2025-05-17 12:29:57,653 - __main__ - INFO - 训练完成，耗时: 145.00秒
+2025-05-17 12:29:58,065 - __main__ - INFO - 方向准确率: 50.81%, MAPE: 5.49%, 最大误差: 21.181854
+2025-05-17 12:29:58,065 - __main__ - INFO - 方向预测准确率: 50.81%
+2025-05-17 12:29:58,065 - __main__ - WARNING - 模型性能较差，考虑调整参数或使用不同的模型架构
+2025-05-17 12:29:58,065 - __main__ - WARNING - R2值为负，表明模型预测比简单使用均值预测还要差
+2025-05-17 12:29:58,472 - __main__ - INFO - 预测可视化图表已保存至: training_logs\results_20250517_122731\predictions.png
+2025-05-17 12:29:58,486 - __main__ - WARNING - 训练历史中不包含MAE指标，跳过MAE曲线绘制
+2025-05-17 12:29:58,491 - __main__ - WARNING - 训练历史中不包含MSE指标，跳过MSE曲线绘制
+2025-05-17 12:29:59,546 - __main__ - INFO - 训练历史图表已保存至: training_logs\results_20250517_122731\training_history.png
+2025-05-17 12:29:59,570 - __main__ - INFO - 模型已保存至: trained_models\XAU_XAG_hybrid_seq30_model\model.h5
+2025-05-17 12:29:59,571 - __main__ - INFO - 缩放器已保存至: trained_models\XAU_XAG_hybrid_seq30_model\scalers.pkl
+2025-05-17 12:29:59,572 - __main__ - INFO - 训练历史已保存至: trained_models\XAU_XAG_hybrid_seq30_model\training_history.json
+2025-05-17 12:29:59,577 - __main__ - INFO - 模型元数据已保存至: trained_models\XAU_XAG_hybrid_seq30_model\metadata.json
+2025-05-17 12:29:59,577 - __main__ - INFO - 训练流程完成，总耗时: 147.90秒

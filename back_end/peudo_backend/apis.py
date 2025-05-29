@@ -2,7 +2,8 @@ import io
 import json
 import traceback
 from datetime import datetime, timedelta
-from typing import List, Dict
+from typing import List, Dict, Optional
+from venv import logger
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
@@ -11,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from back_end.peudo_backend.get_stock_data.auto_update_trends import start_auto_update_services
 from back_end.peudo_backend.user_management import UserModel
 # 导入回测引擎
 from backtest.backtest_strategy import BacktestEngine
@@ -42,6 +44,7 @@ from user_management import FavoriteModel, RecentPairModel
 from user_management import create_session, get_session, delete_session
 from user_management import generate_captcha, verify_captcha
 from user_management.dashboard_service import get_dashboard_data
+from prediction.model_predictor import get_predictor as get_ratio_predictor
 
 app = FastAPI()
 app.add_middleware(
@@ -1451,16 +1454,16 @@ async def get_all_asset_pair_charts(request: dict):
         assets = request.get("assets", [])
         if len(assets) < 2:
             raise HTTPException(status_code=400, detail="至少需要2个资产进行比较")
-        
+
         # 获取参数
         duration = request.get("duration", "2y")
         polynomial_degree = request.get("polynomial_degree", 3)
         threshold_multiplier = request.get("threshold_multiplier", 2.0)
         kline_type = request.get("kline_type", "daily")
-        
+
         # 获取资产名称
         asset_names = get_stock_names(assets)
-        
+
         # 获取所有资产对比值图表数据
         all_charts = get_all_pair_charts(
             assets=assets,
@@ -1469,7 +1472,7 @@ async def get_all_asset_pair_charts(request: dict):
             threshold_multiplier=threshold_multiplier,
             kline_type=kline_type
         )
-        
+
         return {
             "assets": assets,
             "assetNames": asset_names,
@@ -1477,6 +1480,60 @@ async def get_all_asset_pair_charts(request: dict):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# 在PredictionRequestModel类后添加新的模型
+class RatioPredictorRequestModel(BaseModel):
+    code_a: str  # 股票A代码
+    code_b: str  # 股票B代码
+    days_to_predict: int = 30  # 预测天数，默认30天
+    end_date: Optional[str] = None  # 结束日期，默认为最新日期
+
+
+@app.post("/predict_ratio_model/")
+async def predict_ratio_model(request: RatioPredictorRequestModel):
+    """
+    使用预训练的LSTM模型预测两只股票的价格比值
+    
+    参数:
+        request: 包含股票代码和预测参数的请求对象
+        
+    返回:
+        预测结果，包含预测值、历史数据和预测性能指标
+    """
+    try:
+        # 获取预测器实例
+        predictor = get_ratio_predictor()
+
+        # 执行预测
+        result = predictor.predict(
+            stock_code_a=request.code_a,
+            stock_code_b=request.code_b,
+            days_to_predict=request.days_to_predict,
+            end_date=request.end_date
+        )
+
+        # 检查是否有错误
+        if "error" in result:
+            raise HTTPException(
+                status_code=500,
+                detail=f"预测失败: {result['error']}"
+            )
+
+        # 删除上下置信区间（根据需求）
+        if "upper_bound" in result:
+            del result["upper_bound"]
+        if "lower_bound" in result:
+            del result["lower_bound"]
+
+        return result
+
+    except Exception as e:
+        logger.error(f"使用模型预测比值失败: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"预测失败: {str(e)}"
+        )
 
 
 if __name__ == "__main__":

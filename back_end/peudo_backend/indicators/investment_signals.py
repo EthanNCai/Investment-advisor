@@ -342,11 +342,10 @@ def analyze_current_position(
                             abs(abs(current_z_score) - abs(signal["z_score_mark"])) < 1.0):  # 幅度相近
                         market_similarity *= 1.05  # 额外加分
 
-            # 6. 改进的信号强度相似性
+            # 6. 信号强度相似性
             strength_similarity = 1.0
             if "strength" in signal:
                 strength_map = {"weak": 1, "medium": 2, "strong": 3}
-                # 基于当前Z分数估计当前强度
                 current_strength = "medium"
                 if current_z_score is not None:
                     if abs(current_z_score) > 2.0:
@@ -586,21 +585,21 @@ def analyze_current_position(
         if recent_window >= 2:
             trend_slope = (recent_fit[-1] - recent_fit[0]) / (recent_window - 1)
             trend_norm = abs(trend_slope) / mean_ratio  # 标准化斜率
-
+            print(f"trend_norm: {trend_norm}")
             # 根据标准化斜率确定趋势强度
-            if trend_norm < 0.001:  # 几乎没有趋势
+            if trend_norm < 0.0001:  # 几乎没有趋势
                 trend_strength = {
                     "value": round(float(trend_norm * 100), 3),
                     "level": "无明显趋势",
                     "direction": "平稳"
                 }
-            elif trend_norm < 0.003:  # 弱趋势
+            elif trend_norm < 0.0003:  # 弱趋势
                 trend_strength = {
                     "value": round(float(trend_norm * 100), 3),
                     "level": "弱趋势",
                     "direction": "上升" if trend_slope > 0 else "下降"
                 }
-            elif trend_norm < 0.008:  # 中等趋势
+            elif trend_norm < 0.0006:  # 中等趋势
                 trend_strength = {
                     "value": round(float(trend_norm * 100), 3),
                     "level": "中等趋势",
@@ -665,31 +664,42 @@ def analyze_current_position(
 
     # 12. 计算均值回归概率
     mean_reversion_probability = None
-    if current_z_score is not None:
-        # 根据Z分数计算均值回归概率
-        # Z分数越高，均值回归概率越大
+    if current_z_score is not None and percentile is not None:
+        # 改进均值回归概率计算：综合考虑Z分数和历史百分位位置
+        # 1. 基于Z分数的基础概率
         if abs(current_z_score) > 2.3:
-            prob = 0.9  # 极端偏离，高概率回归
+            base_prob = 0.85  # 极端偏离，高概率回归
         elif abs(current_z_score) > 1.8:
-            prob = 0.7  # 显著偏离，较高概率回归
+            base_prob = 0.75  # 显著偏离，较高概率回归
         elif abs(current_z_score) > 1.0:
-            prob = 0.55  # 中等偏离，中等概率回归
+            base_prob = 0.60  # 中等偏离，中等概率回归
         else:
-            prob = 0.4  # 轻微偏离，低概率回归
-
-        # 考虑趋势因素调整概率
+            base_prob = 0.45  # 轻微偏离，低概率回归
+            
+        # 2. 考虑历史百分位的影响
+        # 处于高位或低位时均值回归概率更高
+        percentile_factor = 0
+        if percentile > 0.90 or percentile < 0.10:
+            percentile_factor = 0.55
+        elif percentile > 0.80 or percentile < 0.20:
+            percentile_factor = 0.35
+        elif percentile > 0.70 or percentile < 0.30:
+            percentile_factor = 0.20
+            
+        # 3. 考虑趋势因素调整概率
+        trend_factor = 0
         if trend_strength and trend_strength["level"] != "无明显趋势":
-            trend_factor = 0.2 if trend_strength["level"] == "强趋势" else 0.1
+            trend_factor_base = 0.2 if trend_strength["level"] == "强趋势" else 0.1
 
             # 如果偏离方向与趋势方向一致，降低回归概率；反之则提高
             if (current_z_score > 0 and trend_strength["direction"] == "上升") or \
                     (current_z_score < 0 and trend_strength["direction"] == "下降"):
-                prob -= trend_factor
+                trend_factor = -trend_factor_base
             else:
-                prob += trend_factor
-
-        # 确保概率在有效范围内
-        mean_reversion_probability = max(0.1, min(0.95, prob))
+                trend_factor = trend_factor_base
+        
+        # 4. 综合计算最终概率
+        mean_reversion_probability = max(0.1, min(0.95, base_prob + percentile_factor + trend_factor))
 
     # 13. 分析在周期中的位置
     cycle_position = None
@@ -704,24 +714,38 @@ def analyze_current_position(
             position = "下降区域"
         else:
             position = "底部区域"
-
-        # 结合趋势方向
+        print(f"trend_strength: {trend_strength}, position: {position}")
+        # 趋势判断逻辑
         if trend_strength["direction"] == "上升":
             if position in ["底部区域", "下降区域"]:
                 cycle_status = "可能开始新一轮上升周期"
             elif position in ["中间区域"]:
                 cycle_status = "处于上升周期中段"
-            else:
-                cycle_status = "上升周期接近尾声"
+            else:  # 处于顶部或上升区域
+                # 当处于上升趋势且位于顶部区域时，预测即将转为下降趋势
+                if position == "顶部区域":
+                    cycle_status = "上升周期接近尾声，即将进入下降阶段"
+                else:
+                    cycle_status = "上升周期接近尾声"
         elif trend_strength["direction"] == "下降":
             if position in ["顶部区域", "上升区域"]:
                 cycle_status = "可能开始新一轮下降周期"
             elif position in ["中间区域"]:
                 cycle_status = "处于下降周期中段"
-            else:
-                cycle_status = "下降周期接近尾声"
+            else:  # 处于底部或下降区域
+                # 当处于下降趋势且位于底部区域时，预测即将转为上升趋势
+                if position == "底部区域":
+                    cycle_status = "下降周期接近尾声，即将进入上升阶段"
+                else:
+                    cycle_status = "下降周期接近尾声"
         else:
-            cycle_status = "当前处于盘整阶段"
+            # 改进盘整阶段的判断
+            if position == "顶部区域":
+                cycle_status = "当前处于高位盘整阶段，下行风险增加"
+            elif position == "底部区域":
+                cycle_status = "当前处于低位盘整阶段，上行机会增加"
+            else:
+                cycle_status = "当前处于盘整阶段"
 
         cycle_position = {
             "position": position,
@@ -778,9 +802,9 @@ def analyze_current_position(
             recommendation = f"当前处于{trend_strength['level']}的{trend_strength['direction']}趋势中，"
 
             if trend_strength["direction"] == "上升":
-                recommendation += f"整体偏多操作为宜。价格比值处于{percentile:.0%}百分位水平。"
+                recommendation += f"价格比值处于{percentile:.0%}百分位水平，推荐做空A做多B。"
             else:
-                recommendation += f"整体偏空操作为宜。价格比值处于{percentile:.0%}百分位水平。"
+                recommendation += f"价格比值处于{percentile:.0%}百分位水平，推荐做多A做空B。"
 
     # 与历史信号的比较分析
     elif similarity_score and similarity_score > 0.8 and nearest_signal_id is not None:

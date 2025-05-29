@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Typography, Row, Col, Form, Input, Button, InputNumber, Select, Divider, Spin, Alert, Tabs, Switch, Tooltip, Space, message } from 'antd';
-import { QuestionCircleOutlined, SettingOutlined, LineChartOutlined, TableOutlined, InfoCircleOutlined, BarChartOutlined } from '@ant-design/icons';
+import { QuestionCircleOutlined, SettingOutlined, LineChartOutlined, TableOutlined, InfoCircleOutlined, BarChartOutlined, SaveOutlined, ReloadOutlined, UndoOutlined } from '@ant-design/icons';
 import BacktestResults from './BacktestResults';
 import BacktestTradesList from './BacktestTradesList';
 import SimilarSignalsBacktestResults from './SimilarSignalsBacktestResults';
@@ -145,6 +145,9 @@ interface SimilarSignalsBacktestResult {
   error?: string;
 }
 
+// 缓存键名
+const BACKTEST_CACHE_KEY = 'backtest_params_cache';
+
 const BacktestSystem: React.FC<BacktestSystemProps> = ({ codeA, codeB, signals }) => {
   const [form] = Form.useForm();
   const [similarSignalsForm] = Form.useForm();
@@ -156,6 +159,7 @@ const BacktestSystem: React.FC<BacktestSystemProps> = ({ codeA, codeB, signals }
   const [similarSignalsResults, setSimilarSignalsResults] = useState<SimilarSignalsBacktestResult | null>(null);
   const [activeTab, setActiveTab] = useState<string>("1");
   const [showAdvancedOptions, setShowAdvancedOptions] = useState<boolean>(false);
+  const [hasCachedParams, setHasCachedParams] = useState<boolean>(false);
 
   // 提取信号日期范围
   const getDateRange = () => {
@@ -173,8 +177,84 @@ const BacktestSystem: React.FC<BacktestSystemProps> = ({ codeA, codeB, signals }
 
   const { minDate, maxDate } = getDateRange();
 
-  // 初始化表单默认值
-  React.useEffect(() => {
+  // 保存参数到缓存
+  const saveParamsToCache = (params: any) => {
+    try {
+      const cacheData = {
+        params: {
+          ...params,
+          stockPair: {
+            codeA,
+            codeB
+          }
+        },
+        timestamp: new Date().toISOString()
+      };
+      localStorage.setItem(BACKTEST_CACHE_KEY, JSON.stringify(cacheData));
+      message.success('回测参数已保存');
+      setHasCachedParams(true);
+    } catch (error) {
+      console.error('保存参数缓存失败:', error);
+    }
+  };
+
+  // 从缓存恢复参数
+  const loadParamsFromCache = () => {
+    try {
+      const cachedData = localStorage.getItem(BACKTEST_CACHE_KEY);
+      if (cachedData) {
+        const { params } = JSON.parse(cachedData);
+        // 确保当前股票对与缓存的相同
+        if (params.stockPair?.codeA === codeA && params.stockPair?.codeB === codeB) {
+          // 移除stockPair属性，它不是表单字段
+          const { stockPair, ...formParams } = params;
+          form.setFieldsValue(formParams);
+          message.success('已恢复上次的回测参数');
+          return true;
+        } else {
+          message.info('股票对已变更，无法使用缓存的参数');
+        }
+      } else {
+        message.info('没有找到缓存的参数');
+      }
+      return false;
+    } catch (error) {
+      console.error('从缓存恢复参数失败:', error);
+      return false;
+    }
+  };
+
+  // 清除参数缓存
+  const clearParamsCache = () => {
+    try {
+      localStorage.removeItem(BACKTEST_CACHE_KEY);
+      message.success('参数缓存已清除');
+      setHasCachedParams(false);
+    } catch (error) {
+      console.error('清除参数缓存失败:', error);
+    }
+  };
+
+  // 检查是否有缓存参数
+  const checkCachedParams = () => {
+    try {
+      const cachedData = localStorage.getItem(BACKTEST_CACHE_KEY);
+      if (cachedData) {
+        const { params } = JSON.parse(cachedData);
+        if (params.stockPair?.codeA === codeA && params.stockPair?.codeB === codeB) {
+          setHasCachedParams(true);
+          return;
+        }
+      }
+      setHasCachedParams(false);
+    } catch (error) {
+      console.error('检查缓存参数失败:', error);
+      setHasCachedParams(false);
+    }
+  };
+
+  // 重置到默认参数
+  const resetToDefaultParams = () => {
     form.setFieldsValue({
       code_a: codeA,
       code_b: codeB,
@@ -190,13 +270,43 @@ const BacktestSystem: React.FC<BacktestSystemProps> = ({ codeA, codeB, signals }
       trailing_stop: 0,
       time_stop: 0,
       hedge_mode: 'single',
-      // 设置新参数的默认值
       polynomial_degree: 3,
       anomaly_threshold: 2.0,
       mean_reversion_exit: true,
       mean_reversion_threshold: 0.5,
       reverse_anomaly_exit: true
     });
+    message.success('已重置为默认参数');
+  };
+
+  // 初始化表单默认值
+  React.useEffect(() => {
+    // 首先设置默认值
+    form.setFieldsValue({
+      code_a: codeA,
+      code_b: codeB,
+      start_date: minDate,
+      end_date: maxDate,
+      initial_capital: 100000,
+      position_size_type: 'percent',
+      position_size: 10,
+      stop_loss: 5,
+      take_profit: 10,
+      max_positions: 5,
+      trading_fee: 0.0003,
+      trailing_stop: 0,
+      time_stop: 0,
+      hedge_mode: 'single',
+      polynomial_degree: 3,
+      anomaly_threshold: 2.0,
+      mean_reversion_exit: true,
+      mean_reversion_threshold: 0.5,
+      reverse_anomaly_exit: true
+    });
+    
+    // 检查是否有缓存的参数
+    checkCachedParams();
+    
   }, [codeA, codeB, minDate, maxDate, form]);
 
   // 执行回测
@@ -213,6 +323,9 @@ const BacktestSystem: React.FC<BacktestSystemProps> = ({ codeA, codeB, signals }
       };
       
       console.log('回测参数:', backtestParams); // 调试用
+      
+      // 保存参数到缓存
+      saveParamsToCache(values);
       
       const response = await fetch('http://localhost:8000/backtest_strategy/', {
         method: 'POST',
@@ -320,6 +433,43 @@ const BacktestSystem: React.FC<BacktestSystemProps> = ({ codeA, codeB, signals }
           tab={<span><SettingOutlined />回测参数</span>} 
           key="1"
         >
+          <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+            <Col span={24} style={{ textAlign: 'right' }}>
+              <Space>
+                {hasCachedParams && (
+                  <Button 
+                    icon={<UndoOutlined />} 
+                    onClick={loadParamsFromCache}
+                    type="dashed"
+                  >
+                    恢复上次参数
+                  </Button>
+                )}
+                <Button 
+                  icon={<SaveOutlined />} 
+                  onClick={() => saveParamsToCache(form.getFieldsValue())}
+                >
+                  保存当前参数
+                </Button>
+                <Button 
+                  icon={<ReloadOutlined />} 
+                  onClick={resetToDefaultParams}
+                >
+                  重置为默认值
+                </Button>
+                {hasCachedParams && (
+                  <Button 
+                    icon={<ReloadOutlined />} 
+                    onClick={clearParamsCache}
+                    danger
+                  >
+                    清除参数缓存
+                  </Button>
+                )}
+              </Space>
+            </Col>
+          </Row>
+
           <Form
             form={form}
             layout="vertical"

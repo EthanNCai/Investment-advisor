@@ -319,13 +319,10 @@ def calculate_price_ratio_anomaly(ratio_data: List[float], delta_data: List[floa
     X = np.column_stack((ratio_data, delta_data))
 
     # 应用Isolation Forest异常检测模型
-    # contamination参数表示预期的异常点比例，这里使用较保守的值0.05（5%）
     try:
-        # 只有当数据点足够多时才使用机器学习模型
         if len(ratio_data) >= 20:
             clf = IsolationForest(n_estimators=150, contamination=0.05, random_state=42)
             ml_predictions = clf.fit_predict(X)
-            # 转换预测结果：-1表示异常，1表示正常
             ml_anomaly_indices = [i for i, pred in enumerate(ml_predictions) if pred == -1]
         else:
             ml_anomaly_indices = []
